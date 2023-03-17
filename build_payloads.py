@@ -110,7 +110,7 @@ class PayloadBuilder:
                         int(tx['mint'], 16),
                         int(tx['value'], 16),
                         int(tx['gas'], 16),
-                        int(tx['isSystemTx']),
+                        int(tx.get('isSystemTx', 0)),
                         bytes.fromhex(tx['input'][2:]),
                     ])
                 ).hex()
