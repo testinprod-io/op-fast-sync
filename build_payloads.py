@@ -1,7 +1,10 @@
+import io
 import json
 import os
 import pprint
 import random
+import sys
+import time
 from multiprocessing import Pool
 
 import rlp
@@ -13,10 +16,11 @@ pp = pprint.PrettyPrinter(indent=2)
 
 
 class PayloadBuilder:
-    def __init__(self, payload_dir, l1_rpc_urls, l2_rpc_urls):
+    def __init__(self, payload_dir, l1_rpc_urls, l2_rpc_urls, logging=False):
         self.payload_dir = payload_dir
         self.l1_rpc_urls = l1_rpc_urls
         self.l2_rpc_urls = l2_rpc_urls
+        self.logging = logging
 
     def _get_l1_rpc_url(self):
         return random.choice(self.l1_rpc_urls)
@@ -161,9 +165,14 @@ class PayloadBuilder:
 
     def run_multiproc(self, start, end, num_proc):
         p = Pool(num_proc)
-
-        for _ in tqdm(p.imap_unordered(self.job, range(start, end + 1)), total=end - start + 1):
-            pass
+        pbar = tqdm(p.imap_unordered(self.job, range(start, end + 1)), total=end - start + 1, file=io.StringIO() if self.logging else sys.stdout)
+        logged_at = 0
+        for _ in pbar:
+            now = time.time()
+            if self.logging and now > logged_at + 10:
+                data = pbar.format_dict
+                print(f'building payload | {data["n"]}/{data["total"]} | elapsed: {time.strftime("%H:%M:%S", time.gmtime(data["elapsed"]))}')
+                logged_at = now
 
         p.close()
         p.join()

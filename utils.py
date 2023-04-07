@@ -15,7 +15,7 @@ class RPCMethod:
     GetStorageAt = 'eth_getStorageAt'
 
 
-def send_json_rpc(url, method, params=None, token=None):
+def send_json_rpc(url, method, params=None, token=None, timeout=10):
     headers = {
         'Content-Type': 'application/json',
     }
@@ -27,7 +27,7 @@ def send_json_rpc(url, method, params=None, token=None):
         'params': [] if params is None else params,
         'id': 1
     }
-    res = requests.post(url, json=data, headers=headers)
+    res = requests.post(url, json=data, headers=headers, timeout=timeout)
     return res.json()['result']
 
 
@@ -41,4 +41,5 @@ def parse_args():
     parser.add_argument('--batch-size', dest='batch_size', default=100, type=int)
     parser.add_argument('--jwt-secret', dest='jwt_secret', default='./jwt-secret.txt')
     parser.add_argument('--num-proc', dest='num_proc', default=32, type=int)
+    parser.add_argument('--logging', action='store_true', default=False)
     return parser.parse_args()
