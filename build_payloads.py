@@ -66,8 +66,10 @@ class PayloadBuilder:
 
         for tx in l2_block['transactions']:
             type = tx['type'][2:]
-            to = tx.get('to', '0x')
-            if to is not None:
+            to = tx.get('to')
+            if to is None:
+                to = b''
+            else:
                 to = bytes.fromhex(to[2:])
             if type == '1':
                 encoded_tx = '0x' + (
