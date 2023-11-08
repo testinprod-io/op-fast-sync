@@ -8,12 +8,13 @@ import time
 from multiprocessing import Pool
 
 import rlp
+import eth_abi
 from tqdm import tqdm
 
 from utils import send_json_rpc, RPCMethod, L1_BLOCK_CONTRACT_ADDR
 
 pp = pprint.PrettyPrinter(indent=2)
-
+L1_INFO_TX_TYPES = ['uint64', 'uint64', 'uint256', 'bytes32', 'uint64', 'bytes32', 'uint256', 'uint256']
 
 class PayloadBuilder:
     def __init__(self, payload_dir, l1_rpc_urls, l2_rpc_urls, logging=False):
@@ -54,8 +55,7 @@ class PayloadBuilder:
         l2_block = send_json_rpc(l2_rpc_url, RPCMethod.GetBlockByNumber, params=[l2_block_number, True])
 
         # 2. get l1 block number
-        res = send_json_rpc(l2_rpc_url, RPCMethod.GetStorageAt, params=[L1_BLOCK_CONTRACT_ADDR, hex(0), l2_block_number])
-        l1_block_number = hex(int(res[-16:], 16))
+        l1_block_number = eth_abi.decode(L1_INFO_TX_TYPES, bytes.fromhex(l2_block['transactions'][0]['input'][10:]))[0]
 
         # 3. get l1 mixhash
         res = send_json_rpc(self._get_l1_rpc_url(), RPCMethod.GetBlockByNumber, params=[l1_block_number, False])
