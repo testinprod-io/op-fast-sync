@@ -17,10 +17,11 @@ pp = pprint.PrettyPrinter(indent=2)
 L1_INFO_TX_TYPES = ['uint64', 'uint64', 'uint256', 'bytes32', 'uint64', 'bytes32', 'uint256', 'uint256']
 
 class PayloadBuilder:
-    def __init__(self, payload_dir, l1_rpc_urls, l2_rpc_urls, logging=False):
+    def __init__(self, payload_dir, l1_rpc_urls, l2_rpc_urls, canyon_time, logging=False):
         self.payload_dir = payload_dir
         self.l1_rpc_urls = l1_rpc_urls
         self.l2_rpc_urls = l2_rpc_urls
+        self.canyon_time = canyon_time
         self.logging = logging
 
     def _get_l1_rpc_url(self):
@@ -151,6 +152,9 @@ class PayloadBuilder:
             'blockHash': l2_block['hash'],
             'transactions': encoded_txs,
         }
+
+        if l2_block['timestamp'] >= self.canyon_time:
+            payload['withdrawals'] = []
 
         with open(payload_file, 'w') as f:
             json.dump(payload, f)
