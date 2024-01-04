@@ -153,7 +153,7 @@ class PayloadBuilder:
             'transactions': encoded_txs,
         }
 
-        if l2_block['timestamp'] >= self.canyon_time:
+        if int(l2_block['timestamp'], 16) >= self.canyon_time:
             payload['withdrawals'] = []
 
         with open(payload_file, 'w') as f:
