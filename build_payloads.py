@@ -59,7 +59,7 @@ class PayloadBuilder:
         l1_block_number = eth_abi.decode(L1_INFO_TX_TYPES, bytes.fromhex(l2_block['transactions'][0]['input'][10:]))[0]
 
         # 3. get l1 mixhash
-        res = send_json_rpc(self._get_l1_rpc_url(), RPCMethod.GetBlockByNumber, params=[l1_block_number, False])
+        res = send_json_rpc(self._get_l1_rpc_url(), RPCMethod.GetBlockByNumber, params=[hex(l1_block_number), False])
         prevRandao = res['mixHash']
 
         # 4. encode txs
