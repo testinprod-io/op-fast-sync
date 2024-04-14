@@ -42,5 +42,6 @@ def parse_args():
     parser.add_argument('--jwt-secret', dest='jwt_secret', default='./jwt-secret.txt')
     parser.add_argument('--num-proc', dest='num_proc', default=32, type=int)
     parser.add_argument('--logging', action='store_true', default=False)
+    parser.add_argument('--ecotone-block-number', dest='ecotone_block_number', default=0, type=int)
     parser.add_argument('--canyon-time', dest='canyon_time', default=0, type=int)
     return parser.parse_args()

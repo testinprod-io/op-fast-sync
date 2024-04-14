@@ -53,7 +53,7 @@ class PayloadApplier:
         with open(os.path.join(self.payload_dir, f'{hex(block_number)}.json'), 'r') as f:
             payload = json.load(f)
         is_canyon = int(payload['timestamp'], 16) >= self.canyon_time
-        send_json_rpc(self.engine_url, f'engine_newPayloadV{2 if is_canyon else 1}', params=[payload], token=self.jwt_token)
+        send_json_rpc(self.engine_url, f'engine_newPayloadV{2 if is_canyon else 1}', params=payload, token=self.jwt_token)
 
         if block_number < self.end and block_number % self.batch_size < self.batch_size - 1:
             return
