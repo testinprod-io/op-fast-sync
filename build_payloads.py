@@ -17,12 +17,12 @@ pp = pprint.PrettyPrinter(indent=2)
 L1_INFO_TX_TYPES = ['uint64', 'uint64', 'uint256', 'bytes32', 'uint64', 'bytes32', 'uint256', 'uint256']
 
 class PayloadBuilder:
-    def __init__(self, payload_dir, l1_rpc_urls, l2_rpc_urls, canyon_time, ecotone_block_number, logging=False):
+    def __init__(self, payload_dir, l1_rpc_urls, l2_rpc_urls, canyon_time, ecotone_time, logging=False):
         self.payload_dir = payload_dir
         self.l1_rpc_urls = l1_rpc_urls
         self.l2_rpc_urls = l2_rpc_urls
         self.canyon_time = canyon_time
-        self.ecotone_block_number = ecotone_block_number
+        self.ecotone_time = ecotone_time
         self.logging = logging
 
     def _get_l1_rpc_url(self):
@@ -56,11 +56,11 @@ class PayloadBuilder:
         # 1. get block from l2
         l2_block = send_json_rpc(l2_rpc_url, RPCMethod.GetBlockByNumber, params=[l2_block_number, True])
         txInput = l2_block['transactions'][0]['input']
-        if n > self.ecotone_block_number:
+        # 2. get l1 block number
+        if int(l2_block['timestamp'], 16) >= self.ecotone_time:
             l1_block_number = hex(int.from_bytes(bytes.fromhex(txInput[2:])[28:36], 'big'))
         else:
-            # 2. get l1 block number
-            l1_block_number = eth_abi.decode(L1_INFO_TX_TYPES, bytes.fromhex(txInput[10:]))[0]
+            l1_block_number = hex(eth_abi.decode(L1_INFO_TX_TYPES, bytes.fromhex(txInput[10:]))[0])
 
         l1_rpc_url = self._get_l1_rpc_url()
         # 3. get l1 mixhash
@@ -157,14 +157,16 @@ class PayloadBuilder:
             'transactions': encoded_txs,
         }
 
+        payloadArray = [payload]
+
         if int(l2_block['timestamp'], 16) >= self.canyon_time:
             payload['withdrawals'] = []
+            payloadArray = [payload]
 
-        if n > self.ecotone_block_number:
+        if int(l2_block['timestamp'], 16) >= self.ecotone_time:
             payload['blobGasUsed'] = l2_block['blobGasUsed']
             payload['excessBlobGas'] = l2_block['excessBlobGas']
-
-        payloadArray = [payload, [], l2_block['parentBeaconBlockRoot']]
+            payloadArray = [payload, [], l2_block['parentBeaconBlockRoot']]
 
         with open(payload_file, 'w') as f:
             json.dump(payloadArray, f)

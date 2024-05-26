@@ -24,6 +24,7 @@ class PayloadApplier:
             target_finalized_number,
             target_finalized_hash,
             canyon_time,
+            ecotone_time,
             logging=False,
     ):
         self.engine_url = engine_url
@@ -38,6 +39,7 @@ class PayloadApplier:
         self.target_finalized_number = target_finalized_number
         self.target_finalized_hash = target_finalized_hash
         self.canyon_time = canyon_time
+        self.ecotone_time = ecotone_time
         self.logging = logging
 
     def _get_jwt_token(self):
@@ -52,8 +54,10 @@ class PayloadApplier:
     def apply(self, block_number):
         with open(os.path.join(self.payload_dir, f'{hex(block_number)}.json'), 'r') as f:
             payload = json.load(f)
-        is_canyon = int(payload['timestamp'], 16) >= self.canyon_time
-        send_json_rpc(self.engine_url, f'engine_newPayloadV{2 if is_canyon else 1}', params=payload, token=self.jwt_token)
+
+        timestamp = int(payload['timestamp'], 16)
+        version = 3 if timestamp >= self.ecotone_time else 2 if timestamp >= self.canyon_time else 1
+        send_json_rpc(self.engine_url, f'engine_newPayloadV{version}', params=payload, token=self.jwt_token)
 
         if block_number < self.end and block_number % self.batch_size < self.batch_size - 1:
             return
@@ -61,7 +65,7 @@ class PayloadApplier:
         while True:
             res = send_json_rpc(
                 self.engine_url,
-                f'engine_forkchoiceUpdatedV{2 if is_canyon else 1}',
+                f'engine_forkchoiceUpdatedV{version}',
                 params=[
                     {
                         'headBlockHash': payload['blockHash'],
