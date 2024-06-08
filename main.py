@@ -28,7 +28,7 @@ if __name__ == '__main__':
     print(f'Target safe block: {safe_number}')
     print(f'Target finalized block: {finalized_number}')
 
-    payload_builder = PayloadBuilder(args.payload_dir, args.l1_rpc_urls, args.l2_rpc_urls, args.canyon_time, args.logging)
+    payload_builder = PayloadBuilder(args.payload_dir, args.l1_rpc_urls, args.l2_rpc_urls, args.canyon_time, args.ecotone_time, args.logging)
     payload_applier = PayloadApplier(
         args.engine_url,
         args.jwt_secret,
@@ -41,6 +41,7 @@ if __name__ == '__main__':
         finalized_number,
         finalized_hash,
         args.canyon_time,
+        args.ecotone_time,
         args.logging
     )
 
