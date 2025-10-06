@@ -174,18 +174,20 @@ class PayloadBuilder:
         return True
 
     def job(self, n):
-        for _ in range(3):
+        for attempt in range(3):
             try:
                 return self.build(n)
-            except:
-                pass
-        print(f"FAILED: {n}")
+            except Exception as e:
+                if attempt == 2:  # Last attempt
+                    print(f"FAILED to build payload for block {n} after 3 attempts: {e}")
+                    return None
 
     def run_multiproc(self, start, end, num_proc):
+        print(f"PayloadBuilder starting: blocks {start} to {end} (total: {end - start + 1})")
         p = Pool(num_proc)
         pbar = tqdm(p.imap_unordered(self.job, range(start, end + 1)), total=end - start + 1, file=io.StringIO() if self.logging else sys.stdout)
         logged_at = 0
-        for _ in pbar:
+        for result in pbar:
             now = time.time()
             if self.logging and now > logged_at + 10:
                 data = pbar.format_dict
@@ -194,3 +196,4 @@ class PayloadBuilder:
 
         p.close()
         p.join()
+        print(f"PayloadBuilder completed: processed {end - start + 1} blocks")

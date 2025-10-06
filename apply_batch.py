@@ -52,7 +52,11 @@ class PayloadApplier:
         )
 
     def apply(self, block_number):
-        with open(os.path.join(self.payload_dir, f'{hex(block_number)}.json'), 'r') as f:
+        payload_file = os.path.join(self.payload_dir, f'{hex(block_number)}.json')
+        if not os.path.exists(payload_file):
+            raise FileNotFoundError(f"Payload file not found: {payload_file}")
+        
+        with open(payload_file, 'r') as f:
             payload = json.load(f)
 
         timestamp = int(payload['timestamp'], 16)
@@ -81,19 +85,25 @@ class PayloadApplier:
             break
 
     def job(self, block_number):
-        for _ in range(3):
+        for attempt in range(3):
             try:
                 self.apply(block_number)
                 return
             except Exception as e:
+                print(f"Error applying block {block_number} (attempt {attempt + 1}/3): {e}")
                 self._get_jwt_token()
+        print(f"Failed to apply block {block_number} after 3 attempts")
         exit()
 
     def run(self):
+        print(f"PayloadApplier starting: blocks {self.start} to {self.end} (total: {self.end - self.start + 1})")
         self._get_jwt_token()
+        print(f"JWT token generated successfully")
         pbar = tqdm(range(self.start, self.end + 1), total=self.end - self.start + 1, file=io.StringIO() if self.logging else sys.stdout)
         logged_at = 0
         for block_number in pbar:
+            if block_number == self.start:
+                print(f"Starting to apply first block: {block_number}")
             self.job(block_number)
             now = time.time()
             if self.logging and now > logged_at + 10:
