@@ -100,3 +100,17 @@ class PayloadApplier:
                 data = pbar.format_dict
                 print(f'applying payload | {data["n"]}/{data["total"]} | elapsed: {time.strftime("%H:%M:%S", time.gmtime(data["elapsed"]))}')
                 logged_at = now
+
+    def run_interval(self, interval_start, interval_end):
+        """Run payload application for a specific interval of blocks"""
+        self._get_jwt_token()
+        total_blocks = interval_end - interval_start + 1
+        pbar = tqdm(range(interval_start, interval_end + 1), total=total_blocks, file=io.StringIO() if self.logging else sys.stdout)
+        logged_at = 0
+        for block_number in pbar:
+            self.job(block_number)
+            now = time.time()
+            if self.logging and now > logged_at + 10:
+                data = pbar.format_dict
+                print(f'applying payload | {data["n"]}/{data["total"]} | elapsed: {time.strftime("%H:%M:%S", time.gmtime(data["elapsed"]))}')
+                logged_at = now

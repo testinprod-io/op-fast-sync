@@ -9,11 +9,18 @@ if __name__ == '__main__':
     if not os.path.exists(args.payload_dir):
         os.makedirs(args.payload_dir)
         print(f'Created payload dir: {args.payload_dir}')
+    
     engine_header = send_json_rpc(args.rpc_url, RPCMethod.GetBlockByNumber, params=['latest', False])
     start = int(engine_header['number'], 16) + 1
 
-    unsafe_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['latest', False])
-    end = int(unsafe_header['number'], 16)
+    # Use end_block if specified, otherwise get latest block
+    if args.end_block is not None:
+        end = args.end_block
+        print(f'Using specified end block: {end}')
+    else:
+        unsafe_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['latest', False])
+        end = int(unsafe_header['number'], 16)
+        print(f'Using latest block as end: {end}')
 
     safe_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['safe', False])
     safe_number = int(safe_header['number'], 16)
@@ -24,9 +31,10 @@ if __name__ == '__main__':
     finalized_hash = finalized_header['hash']
 
     print(f'Current execution engine header: {start - 1}')
-    print(f'Target unsafe block: {end}')
+    print(f'Target end block: {end}')
     print(f'Target safe block: {safe_number}')
     print(f'Target finalized block: {finalized_number}')
+    print(f'Sync interval: {args.interval} blocks')
 
     payload_builder = PayloadBuilder(args.payload_dir, args.l1_rpc_urls, args.l2_rpc_urls, args.canyon_time, args.ecotone_time, args.logging)
     payload_applier = PayloadApplier(
@@ -45,8 +53,22 @@ if __name__ == '__main__':
         args.logging
     )
 
-    print('Start building payloads')
-    payload_builder.run_multiproc(start, end, args.num_proc)
-
-    print('Start applying payloads')
-    payload_applier.run()
+    # Process blocks in intervals
+    current_start = start
+    interval_count = 0
+    
+    while current_start <= end:
+        interval_end = min(current_start + args.interval - 1, end)
+        interval_count += 1
+        
+        print(f'\n=== Processing interval {interval_count}: blocks {current_start} to {interval_end} ===')
+        
+        print(f'Building payloads for interval {interval_count}')
+        payload_builder.run_multiproc(current_start, interval_end, args.num_proc)
+        
+        print(f'Applying payloads for interval {interval_count}')
+        payload_applier.run_interval(current_start, interval_end)
+        
+        current_start = interval_end + 1
+    
+    print(f'\nCompleted syncing {end - start + 1} blocks in {interval_count} intervals')

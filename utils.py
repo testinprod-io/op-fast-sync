@@ -44,4 +44,6 @@ def parse_args():
     parser.add_argument('--logging', action='store_true', default=False)
     parser.add_argument('--canyon-time', dest='canyon_time', default=0, type=int)
     parser.add_argument('--ecotone-time', dest='ecotone_time', default=0, type=int)
+    parser.add_argument('--interval', dest='interval', default=1000, type=int, help='Number of blocks to sync in each interval')
+    parser.add_argument('--end-block', dest='end_block', type=int, help='Block number to stop syncing at (overrides latest block)')
     return parser.parse_args()
