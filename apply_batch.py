@@ -57,11 +57,13 @@ class PayloadApplier:
             raise FileNotFoundError(f"Payload file not found: {payload_file}")
         
         with open(payload_file, 'r') as f:
-            payload = json.load(f)
+            payload_array = json.load(f)
 
+        # The payload is stored as an array, extract the actual payload (first element)
+        payload = payload_array[0]
         timestamp = int(payload['timestamp'], 16)
         version = 3 if timestamp >= self.ecotone_time else 2 if timestamp >= self.canyon_time else 1
-        send_json_rpc(self.engine_url, f'engine_newPayloadV{version}', params=payload, token=self.jwt_token)
+        send_json_rpc(self.engine_url, f'engine_newPayloadV{version}', params=payload_array, token=self.jwt_token)
 
         if block_number < self.end and block_number % self.batch_size < self.batch_size - 1:
             return
