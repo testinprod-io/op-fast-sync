@@ -13,7 +13,19 @@ if __name__ == '__main__':
     start = int(engine_header['number'], 16) + 1
 
     unsafe_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['latest', False])
-    end = int(unsafe_header['number'], 16)
+    rpc_end = int(unsafe_header['number'], 16)
+    
+    # Use block_end flag if provided, otherwise use latest block from RPC
+    end = args.block_end if args.block_end is not None else rpc_end
+    
+    # Validate that block_end is not less than start
+    if args.block_end is not None and args.block_end < start:
+        print(f'Error: --block-end ({args.block_end}) cannot be less than start block ({start})')
+        exit(1)
+    
+    # Warn if block_end is greater than latest block from RPC
+    if args.block_end is not None and args.block_end > rpc_end:
+        print(f'Warning: --block-end ({args.block_end}) is greater than latest block from RPC ({rpc_end})')
 
     safe_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['safe', False])
     safe_number = int(safe_header['number'], 16)
@@ -24,7 +36,11 @@ if __name__ == '__main__':
     finalized_hash = finalized_header['hash']
 
     print(f'Current execution engine header: {start - 1}')
-    print(f'Target unsafe block: {end}')
+    if args.block_end is not None:
+        print(f'Target end block (user specified): {end}')
+        print(f'Latest block from RPC: {rpc_end}')
+    else:
+        print(f'Target unsafe block: {end}')
     print(f'Target safe block: {safe_number}')
     print(f'Target finalized block: {finalized_number}')
 

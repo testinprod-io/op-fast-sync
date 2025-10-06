@@ -44,4 +44,5 @@ def parse_args():
     parser.add_argument('--logging', action='store_true', default=False)
     parser.add_argument('--canyon-time', dest='canyon_time', default=0, type=int)
     parser.add_argument('--ecotone-time', dest='ecotone_time', default=0, type=int)
+    parser.add_argument('--block-end', dest='block_end', default=None, type=int, help='End syncing at this block number instead of latest block from RPC')
     return parser.parse_args()
