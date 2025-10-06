@@ -236,6 +236,76 @@ class PayloadApplier:
             print(f"WARNING: Error in forkchoice update: {str(e)}")
             return False
 
+    def _try_finalize_specific_block(self, block_number):
+        """
+        Try to finalize a specific block that's having forkchoice issues.
+        This is called when we get None status errors.
+        
+        Args:
+            block_number: The block number to finalize
+            
+        Returns:
+            bool: True if finalization succeeds, False otherwise
+        """
+        try:
+            print(f"Attempting to finalize specific block {block_number}...")
+            
+            # Strategy 1: Try to get the block hash and finalize it
+            block_response = send_json_rpc(
+                self.engine_url,
+                'eth_getBlockByNumber',
+                params=[hex(block_number), False],
+                token=self.jwt_token
+            )
+            
+            if 'error' in block_response or not block_response.get('result'):
+                print(f"WARNING: Cannot get block {block_number} for finalization: {block_response.get('error', 'No result')}")
+            else:
+                block_hash = block_response['result']['hash']
+                print(f"Got block {block_number} hash: {block_hash}")
+                
+                # Try to finalize this specific block
+                if self._call_forkchoice_update(block_hash, block_hash, block_hash):
+                    print(f"✓ Successfully finalized block {block_number}")
+                    return True
+            
+            # Strategy 2: Try to finalize using the payload hash from the payload file
+            payload_file = os.path.join(self.payload_dir, f'{hex(block_number)}.json')
+            if os.path.exists(payload_file):
+                try:
+                    with open(payload_file, 'r') as f:
+                        payload_data = json.load(f)
+                    
+                    # Handle both list format [payload] and direct payload format
+                    if isinstance(payload_data, list) and len(payload_data) > 0:
+                        payload = payload_data[0]
+                    else:
+                        payload = payload_data
+                    
+                    if 'blockHash' in payload:
+                        block_hash = payload['blockHash']
+                        print(f"Using payload block hash for finalization: {block_hash}")
+                        
+                        if self._call_forkchoice_update(block_hash, block_hash, block_hash):
+                            print(f"✓ Successfully finalized block {block_number} using payload hash")
+                            return True
+                    
+                except Exception as e:
+                    print(f"WARNING: Error reading payload file for finalization: {str(e)}")
+            
+            # Strategy 3: Try a simple finalization call
+            print("Trying simple finalization for this block...")
+            if self._try_simple_finalization():
+                print(f"✓ Simple finalization successful for block {block_number}")
+                return True
+            
+            print(f"WARNING: All finalization strategies failed for block {block_number}")
+            return False
+            
+        except Exception as e:
+            print(f"WARNING: Exception during block {block_number} finalization: {str(e)}")
+            return False
+
     def verify_block_number(self, expected_block, max_attempts=30, delay=2):
         """
         Verify that the engine has reached the expected block number.
@@ -399,9 +469,20 @@ class PayloadApplier:
                             time.sleep(0.5)  # Wait a bit longer for None status
                             continue
                         else:
-                            error_msg = f"Forkchoice status is None for block {block_number} after {forkchoice_attempts} attempts. This may indicate the engine needs finalization."
-                            print(f"ERROR: {error_msg}")
-                            raise Exception(error_msg)
+                            # Try to finalize this specific block before giving up
+                            print(f"WARNING: Forkchoice status is None for block {block_number} after {forkchoice_attempts} attempts.")
+                            print(f"Attempting to finalize block {block_number} to resolve the issue...")
+                            
+                            finalization_success = self._try_finalize_specific_block(block_number)
+                            if finalization_success:
+                                print(f"✓ Successfully finalized block {block_number}, retrying forkchoice...")
+                                # Reset attempts and try forkchoice again
+                                forkchoice_attempts = 0
+                                continue
+                            else:
+                                error_msg = f"Forkchoice status is None for block {block_number} after {forkchoice_attempts} attempts and finalization failed. This may indicate the engine needs finalization."
+                                print(f"ERROR: {error_msg}")
+                                raise Exception(error_msg)
                     else:
                         error_msg = f"Unknown forkchoice status for block {block_number}: {status} (type: {type(status)})"
                         print(f"ERROR: {error_msg}")
