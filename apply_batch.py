@@ -54,6 +54,141 @@ class PayloadApplier:
             bytes.fromhex(self.jwt_secret[2:] if self.jwt_secret.startswith('0x') else self.jwt_secret)
         )
 
+    def finalize_interval(self, expected_block):
+        """
+        Finalize the interval by calling forkchoiceUpdated to ensure the engine commits to the latest block.
+        
+        Args:
+            expected_block: The block number we expect to be at
+            
+        Returns:
+            bool: True if finalization succeeds, False otherwise
+        """
+        try:
+            print(f"Finalizing interval with block {expected_block}...")
+            
+            # Get the latest block to use as head
+            current_block_response = send_json_rpc(
+                self.engine_url,
+                'eth_blockNumber',
+                token=self.jwt_token
+            )
+            
+            if 'error' in current_block_response:
+                print(f"ERROR: Failed to get current block for finalization: {current_block_response['error']}")
+                return False
+            
+            current_block = int(current_block_response.get('result', '0x0'), 16)
+            
+            # Get the block hash for the current block
+            block_response = send_json_rpc(
+                self.engine_url,
+                'eth_getBlockByNumber',
+                params=[hex(current_block), False],
+                token=self.jwt_token
+            )
+            
+            if 'error' in block_response or not block_response.get('result'):
+                print(f"ERROR: Failed to get block {current_block} for finalization: {block_response.get('error', 'No result')}")
+                return False
+            
+            block_hash = block_response['result']['hash']
+            
+            # Call forkchoiceUpdated to finalize the current state
+            forkchoice_response = send_json_rpc(
+                self.engine_url,
+                'engine_forkchoiceUpdatedV1',
+                params=[{
+                    'headBlockHash': block_hash,
+                    'safeBlockHash': block_hash,
+                    'finalizedBlockHash': block_hash,
+                }],
+                token=self.jwt_token,
+            )
+            
+            if 'error' in forkchoice_response:
+                print(f"ERROR: Forkchoice finalization failed: {forkchoice_response['error']}")
+                return False
+            
+            payload_status = forkchoice_response.get('result', {}).get('payloadStatus', {})
+            status = payload_status.get('status')
+            
+            if status in ['VALID', 'ACCEPTED']:
+                print(f"✓ Interval finalized successfully with status: {status}")
+                return True
+            elif status == 'INVALID':
+                error_msg = f"Invalid forkchoice during finalization: {payload_status.get('validationError', 'Unknown error')}"
+                print(f"ERROR: {error_msg}")
+                return False
+            else:
+                print(f"WARNING: Unexpected forkchoice status during finalization: {status}")
+                return True  # Continue anyway, might still be valid
+                
+        except Exception as e:
+            print(f"ERROR: Exception during interval finalization: {str(e)}")
+            return False
+
+    def verify_block_number(self, expected_block, max_attempts=30, delay=2):
+        """
+        Verify that the engine has reached the expected block number.
+        
+        Args:
+            expected_block: The block number we expect to be at
+            max_attempts: Maximum number of verification attempts
+            delay: Delay between attempts in seconds
+            
+        Returns:
+            bool: True if verification succeeds, False otherwise
+        """
+        print(f"Verifying engine has reached block {expected_block}...")
+        
+        # First, try to finalize the current state
+        if not self.finalize_interval(expected_block):
+            print(f"WARNING: Interval finalization failed, continuing with verification...")
+        
+        for attempt in range(max_attempts):
+            try:
+                # Get current block number from engine
+                current_block_response = send_json_rpc(
+                    self.engine_url,
+                    'eth_blockNumber',
+                    token=self.jwt_token
+                )
+                
+                if 'error' in current_block_response:
+                    print(f"WARNING: Error getting block number (attempt {attempt + 1}/{max_attempts}): {current_block_response['error']}")
+                    time.sleep(delay)
+                    continue
+                
+                current_block = int(current_block_response.get('result', '0x0'), 16)
+                expected_hex = hex(expected_block)
+                
+                print(f"Attempt {attempt + 1}/{max_attempts}: Current block: {current_block} (0x{current_block:x}), Expected: {expected_block} (0x{expected_block:x})")
+                
+                if current_block >= expected_block:
+                    print(f"✓ Verification successful: Engine has reached block {current_block} >= {expected_block}")
+                    return True
+                
+                # If we're close but not quite there, wait a bit longer
+                if current_block >= expected_block - 5:
+                    print(f"Engine is close (block {current_block}), waiting for final blocks...")
+                    time.sleep(delay)
+                    continue
+                    
+                # If we're far behind, something might be wrong
+                if attempt >= 5 and current_block < expected_block - 10:
+                    print(f"WARNING: Engine seems to be stuck at block {current_block}, expected {expected_block}")
+                    
+                time.sleep(delay)
+                
+            except Exception as e:
+                print(f"WARNING: Error during verification (attempt {attempt + 1}/{max_attempts}): {str(e)}")
+                time.sleep(delay)
+                continue
+        
+        print(f"✗ Verification failed: Engine did not reach block {expected_block} after {max_attempts} attempts")
+        return False
+
     def apply(self, block_number):
         try:
             # Load payload file
@@ -148,8 +283,19 @@ class PayloadApplier:
                         raise Exception(error_msg)
                     elif status == 'VALID':
                         break
+                    elif status is None:
+                        # Status is None, this often means the engine needs more time or a finalizing call
+                        if forkchoice_attempts < 10:  # Give more attempts for None status
+                            forkchoice_attempts += 1
+                            print(f"WARNING: Forkchoice status is None for block {block_number} (attempt {forkchoice_attempts}/100), retrying...")
+                            time.sleep(0.5)  # Wait a bit longer for None status
+                            continue
+                        else:
+                            error_msg = f"Forkchoice status is None for block {block_number} after {forkchoice_attempts} attempts. This may indicate the engine needs finalization."
+                            print(f"ERROR: {error_msg}")
+                            raise Exception(error_msg)
                     else:
-                        error_msg = f"Unknown forkchoice status for block {block_number}: {status}"
+                        error_msg = f"Unknown forkchoice status for block {block_number}: {status} (type: {type(status)})"
                         print(f"ERROR: {error_msg}")
                         raise Exception(error_msg)
                         

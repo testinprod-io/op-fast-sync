@@ -49,6 +49,10 @@ The following args are required:
 * `--logging` Enable logging mode
 * `--canyon-time` Canyon fork timestamp (default: 0)
 * `--ecotone-time` Ecotone fork timestamp (default: 0)
+* `--verify-intervals` Enable interval verification (default: True)
+* `--no-verify-intervals` Disable interval verification
+* `--verify-attempts` Maximum verification attempts per interval (default: 30)
+* `--verify-delay` Delay between verification attempts in seconds (default: 2)
 
 ## Running the tool
 
@@ -100,6 +104,7 @@ The tool now includes comprehensive error handling with direct console output:
 - **Detailed Error Information**: Errors include timestamps, block numbers, and full stack traces
 - **Retry Logic**: Failed blocks are automatically retried up to 3 times with 1-second delays
 - **Clear Error Messages**: Critical errors are displayed with clear formatting and context
+- **Comprehensive Coverage**: Error logging covers both payload building and payload application stages
 
 ### Error Information Displayed:
 Each error includes:
@@ -108,10 +113,36 @@ Each error includes:
 - Error type and message
 - Full stack trace
 - Payload file path and existence status
-- Engine URL being used
+- RPC URLs being used (L1 and L2)
 - Retry attempt information
 
-### Example Error Output:
+### Payload Building Errors:
+The payload building stage includes detailed error logging for:
+- **L2 Block Retrieval**: Errors when fetching blocks from L2 RPC
+- **L1 Block Number Extraction**: Issues with parsing transaction inputs
+- **L1 Mixhash Retrieval**: Problems fetching mixhash from L1 RPC
+- **Transaction Encoding**: Failures in encoding different transaction types
+- **Payload Construction**: Errors in building the final payload structure
+- **File Writing**: Issues writing payload files to disk
+
+### Example Payload Building Error:
+```
+ERROR: Build failed for block 12345:
+{
+  "block_number": 12345,
+  "timestamp": "2024-01-15T10:30:45.123456",
+  "error_type": "ConnectionError",
+  "error_message": "Connection refused",
+  "traceback": "Traceback (most recent call last)...",
+  "payload_file": "/path/to/payloads/0x3039.json",
+  "l1_rpc_urls": ["http://l1-rpc:8545"],
+  "l2_rpc_urls": ["http://l2-rpc:8545"],
+  "canyon_time": 0,
+  "ecotone_time": 0
+}
+```
+
+### Example Payload Application Error:
 ```
 ERROR: Apply failed for block 12345:
 {
@@ -124,4 +155,44 @@ ERROR: Apply failed for block 12345:
   "engine_url": "http://localhost:8551",
   "payload_exists": true
 }
+```
+
+## Interval Verification
+
+The tool now includes automatic verification between intervals to ensure each interval is fully synced before proceeding to the next:
+
+### Verification Features:
+- **Block Number Checking**: Verifies that the engine has reached the expected block number after each interval
+- **Retry Logic**: Attempts verification multiple times with configurable delays
+- **Progress Reporting**: Shows current vs expected block numbers during verification
+- **Configurable Settings**: Control verification attempts and delays via command line
+
+### Verification Process:
+1. After applying all payloads in an interval, the tool calls `eth_blockNumber`
+2. Compares the current block number with the expected end block of the interval
+3. Retries verification up to the configured number of attempts
+4. Provides clear feedback on verification success or failure
+
+### Example Verification Output:
+```
+✓ Completed applying payloads for interval 1: blocks 1000 to 1999
+Verifying interval 1 completion...
+Verifying engine has reached block 1999...
+Attempt 1/30: Current block: 1995 (0x7cb), Expected: 1999 (0x7cf)
+Engine is close (block 1995), waiting for final blocks...
+Attempt 2/30: Current block: 1999 (0x7cf), Expected: 1999 (0x7cf)
+✓ Verification successful: Engine has reached block 1999 >= 1999
+✓ Interval 1 verification successful: blocks 1000 to 1999
+```
+
+### Disabling Verification:
+If you want to disable interval verification for faster syncing:
+```bash
+python main.py --no-verify-intervals [other args...]
+```
+
+### Customizing Verification:
+```bash
+# Custom verification settings
+python main.py --verify-attempts 60 --verify-delay 5 [other args...]
 ```

@@ -36,6 +36,10 @@ if __name__ == '__main__':
     print(f'Target safe block: {safe_number}')
     print(f'Target finalized block: {finalized_number}')
     print(f'Sync interval: {args.interval} blocks')
+    print(f'Interval verification: {"Enabled" if args.verify_intervals else "Disabled"}')
+    if args.verify_intervals:
+        print(f'Verification attempts: {args.verify_attempts}')
+        print(f'Verification delay: {args.verify_delay}s')
 
     payload_builder = PayloadBuilder(args.payload_dir, args.l1_rpc_urls, args.l2_rpc_urls, args.canyon_time, args.ecotone_time, args.logging)
     payload_applier = PayloadApplier(
@@ -72,7 +76,24 @@ if __name__ == '__main__':
                 print(f'Applying payloads for interval {interval_count}')
                 payload_applier.run_interval(current_start, interval_end)
                 
-                print(f'✓ Completed interval {interval_count}: blocks {current_start} to {interval_end}')
+                print(f'✓ Completed applying payloads for interval {interval_count}: blocks {current_start} to {interval_end}')
+                
+                # Verify that the engine has reached the expected block number (if enabled)
+                if args.verify_intervals:
+                    print(f'Verifying interval {interval_count} completion...')
+                    verification_success = payload_applier.verify_block_number(
+                        interval_end, 
+                        max_attempts=args.verify_attempts,
+                        delay=args.verify_delay
+                    )
+                    
+                    if not verification_success:
+                        print(f'\n✗ WARNING: Interval {interval_count} verification failed - engine did not reach block {interval_end}')
+                        print(f'Continuing to next interval, but sync may be incomplete...')
+                    else:
+                        print(f'✓ Interval {interval_count} verification successful: blocks {current_start} to {interval_end}')
+                else:
+                    print(f'✓ Interval {interval_count} completed: blocks {current_start} to {interval_end} (verification disabled)')
                 
             except Exception as e:
                 print(f'\n✗ ERROR in interval {interval_count} (blocks {current_start} to {interval_end}): {str(e)}')

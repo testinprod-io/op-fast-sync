@@ -46,4 +46,8 @@ def parse_args():
     parser.add_argument('--ecotone-time', dest='ecotone_time', default=0, type=int)
     parser.add_argument('--interval', dest='interval', default=1000, type=int, help='Number of blocks to sync in each interval')
     parser.add_argument('--end-block', dest='end_block', type=int, help='Block number to stop syncing at (overrides latest block)')
+    parser.add_argument('--verify-intervals', dest='verify_intervals', action='store_true', default=True, help='Verify block numbers between intervals (default: True)')
+    parser.add_argument('--no-verify-intervals', dest='verify_intervals', action='store_false', help='Disable interval verification')
+    parser.add_argument('--verify-attempts', dest='verify_attempts', default=30, type=int, help='Maximum verification attempts per interval (default: 30)')
+    parser.add_argument('--verify-delay', dest='verify_delay', default=2, type=int, help='Delay between verification attempts in seconds (default: 2)')
     return parser.parse_args()
