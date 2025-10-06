@@ -40,6 +40,9 @@ if __name__ == '__main__':
     if args.verify_intervals:
         print(f'Verification attempts: {args.verify_attempts}')
         print(f'Verification delay: {args.verify_delay}s')
+    print(f'Interval finalization: {"Enabled" if args.finalize_intervals else "Disabled"}')
+    if args.finalize_intervals:
+        print(f'Finalization attempts: {args.finalize_attempts}')
 
     payload_builder = PayloadBuilder(args.payload_dir, args.l1_rpc_urls, args.l2_rpc_urls, args.canyon_time, args.ecotone_time, args.logging)
     payload_applier = PayloadApplier(
@@ -77,6 +80,19 @@ if __name__ == '__main__':
                 payload_applier.run_interval(current_start, interval_end)
                 
                 print(f'✓ Completed applying payloads for interval {interval_count}: blocks {current_start} to {interval_end}')
+                
+                # Finalize the interval (if enabled)
+                if args.finalize_intervals:
+                    print(f'Finalizing interval {interval_count}...')
+                    finalization_success = payload_applier.finalize_interval(
+                        interval_end,
+                        max_attempts=args.finalize_attempts
+                    )
+                    
+                    if not finalization_success:
+                        print(f'WARNING: Interval {interval_count} finalization failed, continuing...')
+                    else:
+                        print(f'✓ Interval {interval_count} finalized successfully')
                 
                 # Verify that the engine has reached the expected block number (if enabled)
                 if args.verify_intervals:

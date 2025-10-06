@@ -50,4 +50,7 @@ def parse_args():
     parser.add_argument('--no-verify-intervals', dest='verify_intervals', action='store_false', help='Disable interval verification')
     parser.add_argument('--verify-attempts', dest='verify_attempts', default=30, type=int, help='Maximum verification attempts per interval (default: 30)')
     parser.add_argument('--verify-delay', dest='verify_delay', default=2, type=int, help='Delay between verification attempts in seconds (default: 2)')
+    parser.add_argument('--finalize-intervals', dest='finalize_intervals', action='store_true', default=True, help='Enable interval finalization (default: True)')
+    parser.add_argument('--no-finalize-intervals', dest='finalize_intervals', action='store_false', help='Disable interval finalization')
+    parser.add_argument('--finalize-attempts', dest='finalize_attempts', default=3, type=int, help='Maximum finalization attempts per interval (default: 3)')
     return parser.parse_args()
