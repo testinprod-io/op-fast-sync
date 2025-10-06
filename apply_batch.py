@@ -64,17 +64,28 @@ class PayloadApplier:
                 raise FileNotFoundError(error_msg)
             
             with open(payload_file, 'r') as f:
-                payload = json.load(f)
+                payload_data = json.load(f)
+
+            # Handle both list format [payload] and direct payload format
+            if isinstance(payload_data, list):
+                if len(payload_data) == 0:
+                    error_msg = f"Empty payload array for block {block_number}"
+                    print(f"ERROR: {error_msg}")
+                    raise Exception(error_msg)
+                payload = payload_data[0]
+            else:
+                payload = payload_data
 
             timestamp = int(payload['timestamp'], 16)
             version = 3 if timestamp >= self.ecotone_time else 2 if timestamp >= self.canyon_time else 1
             
             # Send newPayload request
             try:
+                # Use the original payload_data for the API call to maintain correct format
                 new_payload_response = send_json_rpc(
                     self.engine_url, 
                     f'engine_newPayloadV{version}', 
-                    params=payload, 
+                    params=payload_data, 
                     token=self.jwt_token
                 )
                 
