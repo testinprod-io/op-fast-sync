@@ -1,5 +1,34 @@
 # op-fast-sync
 
+## Installation
+
+This project uses `uv` for fast Python package management. Install `uv` first:
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or using pip
+pip install uv
+
+# Or using homebrew (macOS)
+brew install uv
+```
+
+Then install the project dependencies:
+
+```bash
+# Create a virtual environment and install dependencies
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
+
+# Or install dependencies directly without virtual environment
+uv pip install -r requirements.txt
+```
+
+## Usage
+
 ## required args
 
 The following args are required:
@@ -20,3 +49,79 @@ The following args are required:
 * `--logging` Enable logging mode
 * `--canyon-time` Canyon fork timestamp (default: 0)
 * `--ecotone-time` Ecotone fork timestamp (default: 0)
+
+## Running the tool
+
+After installing dependencies with `uv`, you can run the tool in several ways:
+
+```bash
+# Method 1: Activate virtual environment and run normally
+source .venv/bin/activate
+python main.py --l1 <l1_url> --l2 <l2_url> --rpc <rpc_url> --engine <engine_url> --jwt-secret <jwt_file>
+
+# Method 2: Using uv to run the script directly (if you installed without venv)
+uv run main.py --l1 <l1_url> --l2 <l2_url> --rpc <rpc_url> --engine <engine_url> --jwt-secret <jwt_file>
+
+# Method 3: Using python3 directly (if dependencies are installed globally)
+python3 main.py --l1 <l1_url> --l2 <l2_url> --rpc <rpc_url> --engine <engine_url> --jwt-secret <jwt_file>
+```
+
+### Example with interval syncing:
+
+```bash
+# Using virtual environment (recommended)
+source .venv/bin/activate
+python main.py \
+  --l1 https://your-l1-rpc-url \
+  --l2 https://your-l2-rpc-url \
+  --rpc http://localhost:8545 \
+  --engine http://localhost:8551 \
+  --jwt-secret ./jwt-secret.txt \
+  --interval 100 \
+  --end-block 105235100
+
+# Or using uv run directly
+uv run main.py \
+  --l1 https://your-l1-rpc-url \
+  --l2 https://your-l2-rpc-url \
+  --rpc http://localhost:8545 \
+  --engine http://localhost:8551 \
+  --jwt-secret ./jwt-secret.txt \
+  --interval 100 \
+  --end-block 105235100
+```
+
+## Error Handling and Logging
+
+The tool now includes comprehensive error handling with direct console output:
+
+### Error Logging Features:
+- **Direct Console Output**: All errors are printed directly to stdout with clear formatting
+- **Detailed Error Information**: Errors include timestamps, block numbers, and full stack traces
+- **Retry Logic**: Failed blocks are automatically retried up to 3 times with 1-second delays
+- **Clear Error Messages**: Critical errors are displayed with clear formatting and context
+
+### Error Information Displayed:
+Each error includes:
+- Timestamp of the error
+- Block number that failed
+- Error type and message
+- Full stack trace
+- Payload file path and existence status
+- Engine URL being used
+- Retry attempt information
+
+### Example Error Output:
+```
+ERROR: Apply failed for block 12345:
+{
+  "block_number": 12345,
+  "timestamp": "2024-01-15T10:30:45.123456",
+  "error_type": "ConnectionError",
+  "error_message": "Connection refused",
+  "traceback": "Traceback (most recent call last)...",
+  "payload_file": "/path/to/payloads/0x3039.json",
+  "engine_url": "http://localhost:8551",
+  "payload_exists": true
+}
+```

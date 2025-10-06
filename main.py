@@ -1,4 +1,5 @@
 import os
+import sys
 
 from apply_batch import PayloadApplier
 from build_payloads import PayloadBuilder
@@ -57,18 +58,31 @@ if __name__ == '__main__':
     current_start = start
     interval_count = 0
     
-    while current_start <= end:
-        interval_end = min(current_start + args.interval - 1, end)
-        interval_count += 1
+    try:
+        while current_start <= end:
+            interval_end = min(current_start + args.interval - 1, end)
+            interval_count += 1
+            
+            print(f'\n=== Processing interval {interval_count}: blocks {current_start} to {interval_end} ===')
+            
+            try:
+                print(f'Building payloads for interval {interval_count}')
+                payload_builder.run_multiproc(current_start, interval_end, args.num_proc)
+                
+                print(f'Applying payloads for interval {interval_count}')
+                payload_applier.run_interval(current_start, interval_end)
+                
+                print(f'✓ Completed interval {interval_count}: blocks {current_start} to {interval_end}')
+                
+            except Exception as e:
+                print(f'\n✗ ERROR in interval {interval_count} (blocks {current_start} to {interval_end}): {str(e)}')
+                raise
+            
+            current_start = interval_end + 1
         
-        print(f'\n=== Processing interval {interval_count}: blocks {current_start} to {interval_end} ===')
+        print(f'\n✓ Successfully completed syncing {end - start + 1} blocks in {interval_count} intervals')
         
-        print(f'Building payloads for interval {interval_count}')
-        payload_builder.run_multiproc(current_start, interval_end, args.num_proc)
-        
-        print(f'Applying payloads for interval {interval_count}')
-        payload_applier.run_interval(current_start, interval_end)
-        
-        current_start = interval_end + 1
-    
-    print(f'\nCompleted syncing {end - start + 1} blocks in {interval_count} intervals')
+    except Exception as e:
+        print(f'\n✗ CRITICAL ERROR: Sync failed at interval {interval_count}')
+        print(f'Error: {str(e)}')
+        sys.exit(1)
