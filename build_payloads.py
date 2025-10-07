@@ -178,23 +178,40 @@ class PayloadBuilder:
         for attempt in range(3):
             try:
                 result = self.build(n)
-                # Notify shared state that this block is built
-                if self.shared_state is not None:
-                    self.shared_state.mark_built(n)
-                return result
+                # Return success with block number so main thread can update shared state
+                return (n, True, result)
             except Exception as e:
                 if attempt == 2:  # Last attempt
                     print(f"FAILED to build payload for block {n} after 3 attempts: {e}")
-                    if self.shared_state is not None:
-                        self.shared_state.mark_builder_failed()
-                    return None
+                    return (n, False, None)
 
     def run_multiproc(self, start, end, num_proc):
         print(f"PayloadBuilder starting: blocks {start} to {end} (total: {end - start + 1})")
+
+        # Create a worker-safe version without shared_state for multiprocessing
+        worker_builder = PayloadBuilder(
+            self.payload_dir,
+            self.l1_rpc_urls,
+            self.l2_rpc_urls,
+            self.canyon_time,
+            self.ecotone_time,
+            self.logging,
+            shared_state=None  # No shared state for workers
+        )
+
         p = Pool(num_proc)
-        pbar = tqdm(p.imap_unordered(self.job, range(start, end + 1)), total=end - start + 1, file=io.StringIO() if self.logging else sys.stdout)
+        pbar = tqdm(p.imap_unordered(worker_builder.job, range(start, end + 1)), total=end - start + 1, file=io.StringIO() if self.logging else sys.stdout)
         logged_at = 0
         for result in pbar:
+            # Update shared state in main thread
+            if result is not None:
+                block_num, success, _ = result
+                if self.shared_state is not None:
+                    if success:
+                        self.shared_state.mark_built(block_num)
+                    else:
+                        self.shared_state.mark_builder_failed()
+
             now = time.time()
             if self.logging and now > logged_at + 10:
                 data = pbar.format_dict
