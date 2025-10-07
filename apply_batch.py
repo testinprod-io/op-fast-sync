@@ -103,33 +103,58 @@ class PayloadApplier:
         print(f"PayloadApplier starting: blocks {self.start} to {self.end} (total: {self.end - self.start + 1})")
         self._get_jwt_token()
         print(f"JWT token generated successfully")
+        
+        if self.shared_state is None:
+            # Fallback to sequential mode if no shared state
+            pbar = tqdm(range(self.start, self.end + 1), total=self.end - self.start + 1, file=io.StringIO() if self.logging else sys.stdout)
+            logged_at = 0
+            for block_number in pbar:
+                if block_number == self.start:
+                    print(f"Starting to apply first block: {block_number}")
+                self.job(block_number)
+                now = time.time()
+                if self.logging and now > logged_at + 10:
+                    data = pbar.format_dict
+                    print(f'applying payload | {data["n"]}/{data["total"]} | elapsed: {time.strftime("%H:%M:%S", time.gmtime(data["elapsed"]))}')
+                    logged_at = now
+            return
+
+        # Concurrent mode with shared state
         pbar = tqdm(range(self.start, self.end + 1), total=self.end - self.start + 1, file=io.StringIO() if self.logging else sys.stdout)
         logged_at = 0
+        
         for block_number in pbar:
             if block_number == self.start:
                 print(f"Starting to apply first block: {block_number}")
 
-            # Wait for blocks to be available if using shared state
-            if self.shared_state is not None:
-                # Wait for at least batch_size blocks to be available, or until building is complete
-                while True:
-                    highest_built = self.shared_state.get_highest_consecutive_built(block_number)
-                    blocks_available = highest_built - block_number + 1
+            # Wait for blocks to be available
+            while True:
+                # Check if builder failed
+                stats = self.shared_state.get_stats()
+                if stats['builder_failed']:
+                    print(f"Builder failed, stopping applier")
+                    return
 
-                    # Check if builder failed
-                    stats = self.shared_state.get_stats()
-                    if stats['builder_failed']:
-                        print(f"Builder failed, stopping applier")
-                        return
+                # Check if the current block is available
+                if self.shared_state.is_block_built(block_number):
+                    break
 
-                    # If we have enough blocks or building is complete, proceed
-                    if blocks_available >= self.batch_size or stats['building_complete']:
+                # If building is complete and this block isn't built, skip it
+                if stats['building_complete']:
+                    if not self.shared_state.is_block_built(block_number):
+                        print(f"Block {block_number} not available and building complete, skipping")
+                        continue
+                    else:
                         break
 
-                    # Wait for more blocks
-                    if not self.shared_state.wait_for_blocks(block_number - 1, self.batch_size, timeout=1.0):
-                        # Timeout, check again
-                        continue
+                # Debug output every 10 seconds
+                if block_number == self.start:
+                    print(f"Waiting for block {block_number} to be built... (built: {stats['built']}/{stats['total']})")
+
+                # Wait for the specific block to be available
+                if not self.shared_state.wait_for_blocks(block_number - 1, 1, timeout=1.0):
+                    # Timeout, check again
+                    continue
 
             self.job(block_number)
             now = time.time()

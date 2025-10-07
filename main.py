@@ -46,53 +46,92 @@ if __name__ == '__main__':
     print(f'Target safe block: {safe_number}')
     print(f'Target finalized block: {finalized_number}')
 
-    # Create shared state for concurrent building and applying
-    shared_state = SharedState(start, end)
+    # Determine if we should use concurrent mode
+    use_concurrent = args.concurrent and not args.sequential
+    
+    if use_concurrent:
+        print("Using concurrent mode: building and applying will happen simultaneously")
+        # Create shared state for concurrent building and applying
+        shared_state = SharedState(start, end)
 
-    payload_builder = PayloadBuilder(
-        args.payload_dir,
-        args.l1_rpc_urls,
-        args.l2_rpc_urls,
-        args.canyon_time,
-        args.ecotone_time,
-        args.logging,
-        shared_state=shared_state
-    )
-    payload_applier = PayloadApplier(
-        args.engine_url,
-        args.jwt_secret,
-        args.payload_dir,
-        start,
-        end,
-        args.batch_size,
-        safe_number,
-        safe_hash,
-        finalized_number,
-        finalized_hash,
-        args.canyon_time,
-        args.ecotone_time,
-        args.logging,
-        shared_state=shared_state
-    )
+        payload_builder = PayloadBuilder(
+            args.payload_dir,
+            args.l1_rpc_urls,
+            args.l2_rpc_urls,
+            args.canyon_time,
+            args.ecotone_time,
+            args.logging,
+            shared_state=shared_state
+        )
+        payload_applier = PayloadApplier(
+            args.engine_url,
+            args.jwt_secret,
+            args.payload_dir,
+            start,
+            end,
+            args.batch_size,
+            safe_number,
+            safe_hash,
+            finalized_number,
+            finalized_hash,
+            args.canyon_time,
+            args.ecotone_time,
+            args.logging,
+            shared_state=shared_state
+        )
 
-    # Create threads for concurrent building and applying
-    def build_thread():
+        # Create threads for concurrent building and applying
+        def build_thread():
+            print('Start building payloads')
+            payload_builder.run_multiproc(start, end, args.num_proc)
+
+        def apply_thread():
+            print('Start applying payloads')
+            payload_applier.run()
+
+        # Start both threads
+        builder = threading.Thread(target=build_thread, name="Builder")
+        applier = threading.Thread(target=apply_thread, name="Applier")
+
+        builder.start()
+        applier.start()
+
+        # Wait for both to complete
+        builder.join()
+        applier.join()
+
+        print('Both building and applying completed')
+    else:
+        print("Using sequential mode: building all payloads first, then applying them")
+        # Sequential mode - build all, then apply all
+        payload_builder = PayloadBuilder(
+            args.payload_dir,
+            args.l1_rpc_urls,
+            args.l2_rpc_urls,
+            args.canyon_time,
+            args.ecotone_time,
+            args.logging,
+            shared_state=None
+        )
+        payload_applier = PayloadApplier(
+            args.engine_url,
+            args.jwt_secret,
+            args.payload_dir,
+            start,
+            end,
+            args.batch_size,
+            safe_number,
+            safe_hash,
+            finalized_number,
+            finalized_hash,
+            args.canyon_time,
+            args.ecotone_time,
+            args.logging,
+            shared_state=None
+        )
+
         print('Start building payloads')
         payload_builder.run_multiproc(start, end, args.num_proc)
 
-    def apply_thread():
         print('Start applying payloads')
         payload_applier.run()
-
-    # Start both threads
-    builder = threading.Thread(target=build_thread, name="Builder")
-    applier = threading.Thread(target=apply_thread, name="Applier")
-
-    builder.start()
-    applier.start()
-
-    # Wait for both to complete
-    builder.join()
-    applier.join()
-
-    print('Both building and applying completed')

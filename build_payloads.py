@@ -209,6 +209,10 @@ class PayloadBuilder:
                 if self.shared_state is not None:
                     if success:
                         self.shared_state.mark_built(block_num)
+                        # Debug output for first few blocks
+                        if block_num <= start + 10:
+                            stats = self.shared_state.get_stats()
+                            print(f"Built block {block_num} (total built: {stats['built']})")
                     else:
                         self.shared_state.mark_builder_failed()
 

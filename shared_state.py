@@ -32,6 +32,11 @@ class SharedState:
             self.builder_failed = True
             self.condition.notify_all()
 
+    def is_block_built(self, block_number):
+        """Check if a specific block is built."""
+        with self.lock:
+            return block_number in self.built_blocks
+
     def get_highest_consecutive_built(self, from_block):
         """
         Get the highest consecutive block number that has been built starting from from_block.
