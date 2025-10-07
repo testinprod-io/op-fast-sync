@@ -26,6 +26,7 @@ class PayloadApplier:
             canyon_time,
             ecotone_time,
             logging=False,
+            shared_state=None,
     ):
         self.engine_url = engine_url
         with open(jwt_secret_path, 'r') as f:
@@ -41,6 +42,7 @@ class PayloadApplier:
         self.canyon_time = canyon_time
         self.ecotone_time = ecotone_time
         self.logging = logging
+        self.shared_state = shared_state
 
     def _get_jwt_token(self):
         auth_payload = {
@@ -106,6 +108,29 @@ class PayloadApplier:
         for block_number in pbar:
             if block_number == self.start:
                 print(f"Starting to apply first block: {block_number}")
+
+            # Wait for blocks to be available if using shared state
+            if self.shared_state is not None:
+                # Wait for at least batch_size blocks to be available, or until building is complete
+                while True:
+                    highest_built = self.shared_state.get_highest_consecutive_built(block_number)
+                    blocks_available = highest_built - block_number + 1
+
+                    # Check if builder failed
+                    stats = self.shared_state.get_stats()
+                    if stats['builder_failed']:
+                        print(f"Builder failed, stopping applier")
+                        return
+
+                    # If we have enough blocks or building is complete, proceed
+                    if blocks_available >= self.batch_size or stats['building_complete']:
+                        break
+
+                    # Wait for more blocks
+                    if not self.shared_state.wait_for_blocks(block_number - 1, self.batch_size, timeout=1.0):
+                        # Timeout, check again
+                        continue
+
             self.job(block_number)
             now = time.time()
             if self.logging and now > logged_at + 10:

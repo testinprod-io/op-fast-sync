@@ -1,7 +1,9 @@
 import os
+import threading
 
 from apply_batch import PayloadApplier
 from build_payloads import PayloadBuilder
+from shared_state import SharedState
 from utils import parse_args, send_json_rpc, RPCMethod
 
 if __name__ == '__main__':
@@ -44,7 +46,18 @@ if __name__ == '__main__':
     print(f'Target safe block: {safe_number}')
     print(f'Target finalized block: {finalized_number}')
 
-    payload_builder = PayloadBuilder(args.payload_dir, args.l1_rpc_urls, args.l2_rpc_urls, args.canyon_time, args.ecotone_time, args.logging)
+    # Create shared state for concurrent building and applying
+    shared_state = SharedState(start, end)
+
+    payload_builder = PayloadBuilder(
+        args.payload_dir,
+        args.l1_rpc_urls,
+        args.l2_rpc_urls,
+        args.canyon_time,
+        args.ecotone_time,
+        args.logging,
+        shared_state=shared_state
+    )
     payload_applier = PayloadApplier(
         args.engine_url,
         args.jwt_secret,
@@ -58,11 +71,28 @@ if __name__ == '__main__':
         finalized_hash,
         args.canyon_time,
         args.ecotone_time,
-        args.logging
+        args.logging,
+        shared_state=shared_state
     )
 
-    print('Start building payloads')
-    payload_builder.run_multiproc(start, end, args.num_proc)
+    # Create threads for concurrent building and applying
+    def build_thread():
+        print('Start building payloads')
+        payload_builder.run_multiproc(start, end, args.num_proc)
 
-    print('Start applying payloads')
-    payload_applier.run()
+    def apply_thread():
+        print('Start applying payloads')
+        payload_applier.run()
+
+    # Start both threads
+    builder = threading.Thread(target=build_thread, name="Builder")
+    applier = threading.Thread(target=apply_thread, name="Applier")
+
+    builder.start()
+    applier.start()
+
+    # Wait for both to complete
+    builder.join()
+    applier.join()
+
+    print('Both building and applying completed')

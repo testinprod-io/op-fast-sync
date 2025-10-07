@@ -17,13 +17,14 @@ pp = pprint.PrettyPrinter(indent=2)
 L1_INFO_TX_TYPES = ['uint64', 'uint64', 'uint256', 'bytes32', 'uint64', 'bytes32', 'uint256', 'uint256']
 
 class PayloadBuilder:
-    def __init__(self, payload_dir, l1_rpc_urls, l2_rpc_urls, canyon_time, ecotone_time, logging=False):
+    def __init__(self, payload_dir, l1_rpc_urls, l2_rpc_urls, canyon_time, ecotone_time, logging=False, shared_state=None):
         self.payload_dir = payload_dir
         self.l1_rpc_urls = l1_rpc_urls
         self.l2_rpc_urls = l2_rpc_urls
         self.canyon_time = canyon_time
         self.ecotone_time = ecotone_time
         self.logging = logging
+        self.shared_state = shared_state
 
     def _get_l1_rpc_url(self):
         return random.choice(self.l1_rpc_urls)
@@ -49,7 +50,7 @@ class PayloadBuilder:
         l2_block_number = hex(n)
         payload_file = os.path.join(self.payload_dir, f'{l2_block_number}.json')
         if os.path.exists(payload_file):
-            return
+            return True  # Return True for already-built blocks
 
         l2_rpc_url = self._get_l2_rpc_url()
 
@@ -176,10 +177,16 @@ class PayloadBuilder:
     def job(self, n):
         for attempt in range(3):
             try:
-                return self.build(n)
+                result = self.build(n)
+                # Notify shared state that this block is built
+                if self.shared_state is not None:
+                    self.shared_state.mark_built(n)
+                return result
             except Exception as e:
                 if attempt == 2:  # Last attempt
                     print(f"FAILED to build payload for block {n} after 3 attempts: {e}")
+                    if self.shared_state is not None:
+                        self.shared_state.mark_builder_failed()
                     return None
 
     def run_multiproc(self, start, end, num_proc):
@@ -197,3 +204,7 @@ class PayloadBuilder:
         p.close()
         p.join()
         print(f"PayloadBuilder completed: processed {end - start + 1} blocks")
+
+        # Mark building as complete
+        if self.shared_state is not None:
+            self.shared_state.mark_building_complete()
