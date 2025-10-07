@@ -187,6 +187,7 @@ class PayloadBuilder:
 
     def run_multiproc(self, start, end, num_proc):
         print(f"PayloadBuilder starting: blocks {start} to {end} (total: {end - start + 1})")
+        print(f"Using {num_proc} processes for building")
 
         # Create a worker-safe version without shared_state for multiprocessing
         worker_builder = PayloadBuilder(
@@ -202,15 +203,23 @@ class PayloadBuilder:
         p = Pool(num_proc)
         pbar = tqdm(p.imap_unordered(worker_builder.job, range(start, end + 1)), total=end - start + 1, file=io.StringIO() if self.logging else sys.stdout)
         logged_at = 0
+        result_count = 0
+        start_time = time.time()
+        first_result_time = None
+        
         for result in pbar:
             # Update shared state in main thread
             if result is not None:
                 block_num, success, _ = result
                 if self.shared_state is not None:
                     if success:
+                        if first_result_time is None:
+                            first_result_time = time.time()
+                            print(f"First block completed after {first_result_time - start_time:.2f} seconds")
                         self.shared_state.mark_built(block_num)
-                        # Debug output for first few blocks
-                        if block_num <= start + 10:
+                        result_count += 1
+                        # Debug output for first few blocks and every 100 blocks
+                        if block_num <= start + 10 or result_count % 100 == 0:
                             stats = self.shared_state.get_stats()
                             print(f"Built block {block_num} (total built: {stats['built']})")
                     else:

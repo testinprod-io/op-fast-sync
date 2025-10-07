@@ -122,6 +122,7 @@ class PayloadApplier:
         # Concurrent mode with shared state
         pbar = tqdm(range(self.start, self.end + 1), total=self.end - self.start + 1, file=io.StringIO() if self.logging else sys.stdout)
         logged_at = 0
+        wait_count = 0
         
         for block_number in pbar:
             if block_number == self.start:
@@ -147,12 +148,13 @@ class PayloadApplier:
                     else:
                         break
 
-                # Debug output every 10 seconds
-                if block_number == self.start:
-                    print(f"Waiting for block {block_number} to be built... (built: {stats['built']}/{stats['total']})")
+                # Debug output
+                wait_count += 1
+                if block_number == self.start and wait_count % 5 == 1:  # Every 5th wait attempt
+                    print(f"Waiting for block {block_number} to be built... (built: {stats['built']}/{stats['total']}, wait attempt: {wait_count})")
 
                 # Wait for the specific block to be available
-                if not self.shared_state.wait_for_blocks(block_number - 1, 1, timeout=1.0):
+                if not self.shared_state.wait_for_blocks(block_number - 1, 1, timeout=2.0):
                     # Timeout, check again
                     continue
 

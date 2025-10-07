@@ -1,5 +1,6 @@
 import os
 import threading
+import time
 
 from apply_batch import PayloadApplier
 from build_payloads import PayloadBuilder
@@ -94,6 +95,8 @@ if __name__ == '__main__':
         applier = threading.Thread(target=apply_thread, name="Applier")
 
         builder.start()
+        # Give the builder a small head start to build a few blocks
+        time.sleep(1)
         applier.start()
 
         # Wait for both to complete
