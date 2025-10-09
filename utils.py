@@ -47,4 +47,5 @@ def parse_args():
     parser.add_argument('--block-end', dest='block_end', default=None, type=int, help='End syncing at this block number instead of latest block from RPC')
     parser.add_argument('--concurrent', action='store_true', default=True, help='Enable concurrent building and applying (default: True)')
     parser.add_argument('--sequential', action='store_true', default=False, help='Force sequential mode (build all, then apply all)')
+    parser.add_argument('--trigger-sync', dest='trigger_sync', default=None, type=int, help='Trigger EL sync by building and applying a single block, then exit')
     return parser.parse_args()

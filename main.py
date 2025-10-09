@@ -12,6 +12,66 @@ if __name__ == '__main__':
     if not os.path.exists(args.payload_dir):
         os.makedirs(args.payload_dir)
         print(f'Created payload dir: {args.payload_dir}')
+
+    # Handle trigger-sync mode
+    if args.trigger_sync is not None:
+        print(f'Trigger-sync mode: building and applying block {args.trigger_sync}')
+
+        # Build payload for the specific block
+        payload_builder = PayloadBuilder(
+            args.payload_dir,
+            args.l1_rpc_urls,
+            args.l2_rpc_urls,
+            args.canyon_time,
+            args.ecotone_time,
+            args.logging,
+            shared_state=None
+        )
+
+        print(f'Building payload for block {args.trigger_sync}...')
+        try:
+            payload_builder.build(args.trigger_sync)
+            print(f'Successfully built payload for block {args.trigger_sync}')
+        except Exception as e:
+            print(f'Failed to build payload for block {args.trigger_sync}: {e}')
+            exit(1)
+
+        # Apply the payload
+        # Get safe and finalized info from L2 RPC
+        safe_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['safe', False])
+        safe_number = int(safe_header['number'], 16)
+        safe_hash = safe_header['hash']
+
+        finalized_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['finalized', False])
+        finalized_number = int(finalized_header['number'], 16)
+        finalized_hash = finalized_header['hash']
+
+        payload_applier = PayloadApplier(
+            args.engine_url,
+            args.jwt_secret,
+            args.payload_dir,
+            args.trigger_sync,
+            args.trigger_sync,
+            1,  # batch_size = 1 for single block
+            safe_number,
+            safe_hash,
+            finalized_number,
+            finalized_hash,
+            args.canyon_time,
+            args.ecotone_time,
+            args.logging,
+            shared_state=None
+        )
+
+        print(f'Applying payload for block {args.trigger_sync}...')
+        try:
+            payload_applier.run()
+            print(f'Successfully triggered EL sync with block {args.trigger_sync}')
+            exit(0)
+        except Exception as e:
+            print(f'Failed to apply payload for block {args.trigger_sync}: {e}')
+            exit(1)
+
     engine_header = send_json_rpc(args.rpc_url, RPCMethod.GetBlockByNumber, params=['latest', False])
     start = int(engine_header['number'], 16) + 1
 
