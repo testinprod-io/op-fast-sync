@@ -48,4 +48,5 @@ def parse_args():
     parser.add_argument('--concurrent', action='store_true', default=True, help='Enable concurrent building and applying (default: True)')
     parser.add_argument('--sequential', action='store_true', default=False, help='Force sequential mode (build all, then apply all)')
     parser.add_argument('--trigger-sync', dest='trigger_sync', default=None, type=int, help='Trigger EL sync by building and applying a single block, then exit')
+    parser.add_argument('--trigger-sync-list', dest='trigger_sync_list', default=None, type=str, help='Trigger EL sync for a list of blocks sequentially (comma-separated), waiting for each to sync before proceeding. Example: 10,20,30')
     return parser.parse_args()

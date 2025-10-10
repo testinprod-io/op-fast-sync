@@ -7,6 +7,84 @@ from build_payloads import PayloadBuilder
 from shared_state import SharedState
 from utils import parse_args, send_json_rpc, RPCMethod
 
+
+def trigger_sync_for_block(block_number, args):
+    """Build and apply a single block to trigger EL sync."""
+    import json
+    import jwt as pyjwt
+
+    # Build payload for the specific block
+    payload_builder = PayloadBuilder(
+        args.payload_dir,
+        args.l1_rpc_urls,
+        args.l2_rpc_urls,
+        args.canyon_time,
+        args.ecotone_time,
+        args.logging,
+        shared_state=None
+    )
+
+    print(f'Building payload for block {block_number}...')
+    try:
+        payload_builder.build(block_number)
+        print(f'Successfully built payload for block {block_number}')
+    except Exception as e:
+        print(f'Failed to build payload for block {block_number}: {e}')
+        raise
+
+    # Apply the payload - send newPayload and forkchoiceUpdated once
+    payload_file = os.path.join(args.payload_dir, f'{hex(block_number)}.json')
+    with open(payload_file, 'r') as f:
+        payload_array = json.load(f)
+
+    payload = payload_array[0]
+    timestamp = int(payload['timestamp'], 16)
+    version = 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
+
+    # Get JWT token
+    with open(args.jwt_secret, 'r') as f:
+        jwt_secret = f.readline().strip()
+
+    auth_payload = {'iat': int(time.time())}
+    jwt_token = pyjwt.encode(
+        auth_payload,
+        bytes.fromhex(jwt_secret[2:] if jwt_secret.startswith('0x') else jwt_secret)
+    )
+
+    # Get safe and finalized info
+    safe_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['safe', False])
+    safe_hash = safe_header['hash']
+
+    finalized_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['finalized', False])
+    finalized_hash = finalized_header['hash']
+
+    print(f'Sending newPayloadV{version} for block {block_number}...')
+    try:
+        send_json_rpc(args.engine_url, f'engine_newPayloadV{version}', params=payload_array, token=jwt_token)
+        print(f'Successfully sent newPayload')
+    except Exception as e:
+        print(f'Failed to send newPayload: {e}')
+        raise
+
+    print(f'Sending forkchoiceUpdatedV{version} for block {block_number}...')
+    try:
+        send_json_rpc(
+            args.engine_url,
+            f'engine_forkchoiceUpdatedV{version}',
+            params=[{
+                'headBlockHash': payload['blockHash'],
+                'safeBlockHash': safe_hash,
+                'finalizedBlockHash': finalized_hash,
+            }],
+            token=jwt_token,
+        )
+        print(f'Successfully sent forkchoiceUpdated')
+        print(f'EL sync triggered with block {block_number}')
+    except Exception as e:
+        print(f'Failed to send forkchoiceUpdated: {e}')
+        raise
+
+
 if __name__ == '__main__':
     args = parse_args()
     if not os.path.exists(args.payload_dir):
@@ -16,61 +94,55 @@ if __name__ == '__main__':
     # Handle trigger-sync mode
     if args.trigger_sync is not None:
         print(f'Trigger-sync mode: building and applying block {args.trigger_sync}')
-
-        # Build payload for the specific block
-        payload_builder = PayloadBuilder(
-            args.payload_dir,
-            args.l1_rpc_urls,
-            args.l2_rpc_urls,
-            args.canyon_time,
-            args.ecotone_time,
-            args.logging,
-            shared_state=None
-        )
-
-        print(f'Building payload for block {args.trigger_sync}...')
         try:
-            payload_builder.build(args.trigger_sync)
-            print(f'Successfully built payload for block {args.trigger_sync}')
-        except Exception as e:
-            print(f'Failed to build payload for block {args.trigger_sync}: {e}')
-            exit(1)
-
-        # Apply the payload
-        # Get safe and finalized info from L2 RPC
-        safe_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['safe', False])
-        safe_number = int(safe_header['number'], 16)
-        safe_hash = safe_header['hash']
-
-        finalized_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['finalized', False])
-        finalized_number = int(finalized_header['number'], 16)
-        finalized_hash = finalized_header['hash']
-
-        payload_applier = PayloadApplier(
-            args.engine_url,
-            args.jwt_secret,
-            args.payload_dir,
-            args.trigger_sync,
-            args.trigger_sync,
-            1,  # batch_size = 1 for single block
-            safe_number,
-            safe_hash,
-            finalized_number,
-            finalized_hash,
-            args.canyon_time,
-            args.ecotone_time,
-            args.logging,
-            shared_state=None
-        )
-
-        print(f'Applying payload for block {args.trigger_sync}...')
-        try:
-            payload_applier.run()
-            print(f'Successfully triggered EL sync with block {args.trigger_sync}')
+            trigger_sync_for_block(args.trigger_sync, args)
             exit(0)
         except Exception as e:
-            print(f'Failed to apply payload for block {args.trigger_sync}: {e}')
+            print(f'Failed to trigger sync for block {args.trigger_sync}: {e}')
             exit(1)
+
+    # Handle trigger-sync-list mode
+    if args.trigger_sync_list is not None:
+        print(f'Trigger-sync-list mode: {args.trigger_sync_list}')
+        try:
+            block_list = [int(b.strip()) for b in args.trigger_sync_list.split(',')]
+            print(f'Will trigger sync for blocks: {block_list}')
+        except Exception as e:
+            print(f'Failed to parse trigger-sync-list: {e}')
+            exit(1)
+
+        for i, block_number in enumerate(block_list):
+            print(f'\n=== Processing block {block_number} ({i+1}/{len(block_list)}) ===')
+
+            # Trigger sync for this block
+            try:
+                trigger_sync_for_block(block_number, args)
+            except Exception as e:
+                print(f'Failed to trigger sync for block {block_number}: {e}')
+                exit(1)
+
+            # If this is not the last block, wait for the engine to sync to this block
+            if i < len(block_list) - 1:
+                print(f'\nWaiting for engine to sync to block {block_number}...')
+                poll_interval = 60  # 1 minute
+                while True:
+                    try:
+                        result = send_json_rpc(args.rpc_url, RPCMethod.BlockNumber, params=[])
+                        current_block = int(result, 16)
+                        print(f'Engine at block {current_block}, waiting for {block_number}...')
+
+                        if current_block >= block_number:
+                            print(f'Engine has reached block {block_number}!')
+                            break
+
+                        print(f'Waiting {poll_interval} seconds before next check...')
+                        time.sleep(poll_interval)
+                    except Exception as e:
+                        print(f'Error polling engine: {e}. Retrying in {poll_interval} seconds...')
+                        time.sleep(poll_interval)
+
+        print(f'\nAll blocks in trigger-sync-list completed!')
+        exit(0)
 
     engine_header = send_json_rpc(args.rpc_url, RPCMethod.GetBlockByNumber, params=['latest', False])
     start = int(engine_header['number'], 16) + 1
