@@ -125,6 +125,29 @@ if __name__ == '__main__':
             if i < len(block_list) - 1:
                 print(f'\nWaiting for engine to sync to block {block_number}...')
                 poll_interval = 60  # 1 minute
+
+                # Get payload info for resending forkchoiceUpdated
+                import json
+                import jwt as pyjwt
+
+                payload_file = os.path.join(args.payload_dir, f'{hex(block_number)}.json')
+                with open(payload_file, 'r') as f:
+                    payload_array = json.load(f)
+                payload = payload_array[0]
+                timestamp = int(payload['timestamp'], 16)
+                version = 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
+
+                # Get JWT token
+                with open(args.jwt_secret, 'r') as f:
+                    jwt_secret = f.readline().strip()
+
+                # Get safe and finalized info
+                safe_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['safe', False])
+                safe_hash = safe_header['hash']
+
+                finalized_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['finalized', False])
+                finalized_hash = finalized_header['hash']
+
                 while True:
                     try:
                         result = send_json_rpc(args.rpc_url, RPCMethod.BlockNumber, params=[])
@@ -134,6 +157,28 @@ if __name__ == '__main__':
                         if current_block >= block_number:
                             print(f'Engine has reached block {block_number}!')
                             break
+
+                        # Resend forkchoiceUpdated to nudge the engine
+                        print(f'Resending forkchoiceUpdatedV{version} for block {block_number}...')
+                        try:
+                            auth_payload = {'iat': int(time.time())}
+                            jwt_token = pyjwt.encode(
+                                auth_payload,
+                                bytes.fromhex(jwt_secret[2:] if jwt_secret.startswith('0x') else jwt_secret)
+                            )
+                            send_json_rpc(
+                                args.engine_url,
+                                f'engine_forkchoiceUpdatedV{version}',
+                                params=[{
+                                    'headBlockHash': payload['blockHash'],
+                                    'safeBlockHash': safe_hash,
+                                    'finalizedBlockHash': finalized_hash,
+                                }],
+                                token=jwt_token,
+                            )
+                            print(f'Successfully resent forkchoiceUpdated')
+                        except Exception as e:
+                            print(f'Error resending forkchoiceUpdated: {e}')
 
                         print(f'Waiting {poll_interval} seconds before next check...')
                         time.sleep(poll_interval)
