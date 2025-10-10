@@ -28,7 +28,26 @@ def send_json_rpc(url, method, params=None, token=None, timeout=10):
         'id': 1
     }
     res = requests.post(url, json=data, headers=headers, timeout=timeout)
-    return res.json()['result']
+
+    # Check if response is empty
+    if not res.text:
+        raise Exception(f"Empty response from {url} for method {method}")
+
+    # Try to parse JSON
+    try:
+        response_json = res.json()
+    except Exception as e:
+        raise Exception(f"Failed to parse JSON response from {url}: {res.text[:200]}")
+
+    # Check for JSON-RPC error
+    if 'error' in response_json:
+        error = response_json['error']
+        raise Exception(f"RPC error: {error.get('message', error)}")
+
+    if 'result' not in response_json:
+        raise Exception(f"No 'result' field in response: {response_json}")
+
+    return response_json['result']
 
 
 def parse_args():
