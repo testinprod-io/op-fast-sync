@@ -17,12 +17,13 @@ pp = pprint.PrettyPrinter(indent=2)
 L1_INFO_TX_TYPES = ['uint64', 'uint64', 'uint256', 'bytes32', 'uint64', 'bytes32', 'uint256', 'uint256']
 
 class PayloadBuilder:
-    def __init__(self, payload_dir, l1_rpc_urls, l2_rpc_urls, canyon_time, ecotone_time, logging=False, shared_state=None):
+    def __init__(self, payload_dir, l1_rpc_urls, l2_rpc_urls, canyon_time, ecotone_time, isthmus_time, logging=False, shared_state=None):
         self.payload_dir = payload_dir
         self.l1_rpc_urls = l1_rpc_urls
         self.l2_rpc_urls = l2_rpc_urls
         self.canyon_time = canyon_time
         self.ecotone_time = ecotone_time
+        self.isthmus_time = isthmus_time
         self.logging = logging
         self.shared_state = shared_state
 
@@ -169,6 +170,11 @@ class PayloadBuilder:
             payload['excessBlobGas'] = l2_block['excessBlobGas']
             payloadArray = [payload, [], l2_block['parentBeaconBlockRoot']]
 
+        if int(l2_block['timestamp'], 16) >= self.isthmus_time:
+            payload['withdrawalsRoot'] = l2_block['withdrawalsRoot']
+            # For Isthmus, we need to add empty executionRequests array as 4th parameter for V4
+            payloadArray = [payload, [], l2_block['parentBeaconBlockRoot'], []]
+
         with open(payload_file, 'w') as f:
             json.dump(payloadArray, f)
 
@@ -196,6 +202,7 @@ class PayloadBuilder:
             self.l2_rpc_urls,
             self.canyon_time,
             self.ecotone_time,
+            self.isthmus_time,
             self.logging,
             shared_state=None  # No shared state for workers
         )

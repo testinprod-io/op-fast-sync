@@ -25,6 +25,7 @@ class PayloadApplier:
             target_finalized_hash,
             canyon_time,
             ecotone_time,
+            isthmus_time,
             logging=False,
             shared_state=None,
     ):
@@ -41,6 +42,7 @@ class PayloadApplier:
         self.target_finalized_hash = target_finalized_hash
         self.canyon_time = canyon_time
         self.ecotone_time = ecotone_time
+        self.isthmus_time = isthmus_time
         self.logging = logging
         self.shared_state = shared_state
 
@@ -64,7 +66,7 @@ class PayloadApplier:
         # The payload is stored as an array, extract the actual payload (first element)
         payload = payload_array[0]
         timestamp = int(payload['timestamp'], 16)
-        version = 3 if timestamp >= self.ecotone_time else 2 if timestamp >= self.canyon_time else 1
+        version = 4 if timestamp >= self.isthmus_time else 3 if timestamp >= self.ecotone_time else 2 if timestamp >= self.canyon_time else 1
         send_json_rpc(self.engine_url, f'engine_newPayloadV{version}', params=payload_array, token=self.jwt_token, timeout=60)
 
         if block_number < self.end and block_number % self.batch_size < self.batch_size - 1:

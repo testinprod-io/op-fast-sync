@@ -20,6 +20,7 @@ def trigger_sync_for_block(block_number, args):
         args.l2_rpc_urls,
         args.canyon_time,
         args.ecotone_time,
+        args.isthmus_time,
         args.logging,
         shared_state=None
     )
@@ -39,7 +40,7 @@ def trigger_sync_for_block(block_number, args):
 
     payload = payload_array[0]
     timestamp = int(payload['timestamp'], 16)
-    version = 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
+    version = 4 if timestamp >= args.isthmus_time else 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
 
     # Get JWT token
     with open(args.jwt_secret, 'r') as f:
@@ -137,7 +138,7 @@ if __name__ == '__main__':
                     payload_array = json.load(f)
                 payload = payload_array[0]
                 timestamp = int(payload['timestamp'], 16)
-                version = 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
+                version = 4 if timestamp >= args.isthmus_time else 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
 
                 # Get JWT token
                 with open(args.jwt_secret, 'r') as f:
@@ -241,6 +242,7 @@ if __name__ == '__main__':
             args.l2_rpc_urls,
             args.canyon_time,
             args.ecotone_time,
+            args.isthmus_time,
             args.logging,
             shared_state=shared_state
         )
@@ -257,6 +259,7 @@ if __name__ == '__main__':
             finalized_hash,
             args.canyon_time,
             args.ecotone_time,
+            args.isthmus_time,
             args.logging,
             shared_state=shared_state
         )
@@ -293,6 +296,7 @@ if __name__ == '__main__':
             args.l2_rpc_urls,
             args.canyon_time,
             args.ecotone_time,
+            args.isthmus_time,
             args.logging,
             shared_state=None
         )
@@ -309,6 +313,7 @@ if __name__ == '__main__':
             finalized_hash,
             args.canyon_time,
             args.ecotone_time,
+            args.isthmus_time,
             args.logging,
             shared_state=None
         )
