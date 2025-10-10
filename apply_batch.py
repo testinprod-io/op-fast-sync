@@ -65,7 +65,7 @@ class PayloadApplier:
         payload = payload_array[0]
         timestamp = int(payload['timestamp'], 16)
         version = 3 if timestamp >= self.ecotone_time else 2 if timestamp >= self.canyon_time else 1
-        send_json_rpc(self.engine_url, f'engine_newPayloadV{version}', params=payload_array, token=self.jwt_token)
+        send_json_rpc(self.engine_url, f'engine_newPayloadV{version}', params=payload_array, token=self.jwt_token, timeout=60)
 
         if block_number < self.end and block_number % self.batch_size < self.batch_size - 1:
             return
@@ -82,6 +82,7 @@ class PayloadApplier:
                     },
                 ],
                 token=self.jwt_token,
+                timeout=60,
             )
             if res['payloadStatus']['status'] == 'SYNCING':
                 time.sleep(0.1)

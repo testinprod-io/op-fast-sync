@@ -60,7 +60,7 @@ def trigger_sync_for_block(block_number, args):
 
     print(f'Sending newPayloadV{version} for block {block_number}...')
     try:
-        send_json_rpc(args.engine_url, f'engine_newPayloadV{version}', params=payload_array, token=jwt_token)
+        send_json_rpc(args.engine_url, f'engine_newPayloadV{version}', params=payload_array, token=jwt_token, timeout=60)
         print(f'Successfully sent newPayload')
     except Exception as e:
         print(f'Failed to send newPayload: {e}')
@@ -77,12 +77,14 @@ def trigger_sync_for_block(block_number, args):
                 'finalizedBlockHash': finalized_hash,
             }],
             token=jwt_token,
+            timeout=60,
         )
         print(f'Successfully sent forkchoiceUpdated')
-        print(f'EL sync triggered with block {block_number}')
     except Exception as e:
-        print(f'Failed to send forkchoiceUpdated: {e}')
-        raise
+        print(f'Warning: forkchoiceUpdated call failed/timed out: {e}')
+        print(f'Continuing anyway - will retry periodically if using trigger-sync-list')
+
+    print(f'EL sync triggered with block {block_number}')
 
 
 if __name__ == '__main__':
@@ -175,6 +177,7 @@ if __name__ == '__main__':
                                     'finalizedBlockHash': finalized_hash,
                                 }],
                                 token=jwt_token,
+                                timeout=60,
                             )
                             print(f'Successfully resent forkchoiceUpdated')
                         except Exception as e:
