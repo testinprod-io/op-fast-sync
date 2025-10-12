@@ -66,8 +66,10 @@ class PayloadApplier:
         # The payload is stored as an array, extract the actual payload (first element)
         payload = payload_array[0]
         timestamp = int(payload['timestamp'], 16)
-        version = 4 if timestamp >= self.isthmus_time else 3 if timestamp >= self.ecotone_time else 2 if timestamp >= self.canyon_time else 1
-        send_json_rpc(self.engine_url, f'engine_newPayloadV{version}', params=payload_array, token=self.jwt_token, timeout=60)
+        payload_version = 4 if timestamp >= self.isthmus_time else 3 if timestamp >= self.ecotone_time else 2 if timestamp >= self.canyon_time else 1
+        # forkchoiceUpdated stays at V3 for Isthmus (V4 is only for newPayload/getPayload)
+        fcu_version = 3 if timestamp >= self.ecotone_time else 2 if timestamp >= self.canyon_time else 1
+        send_json_rpc(self.engine_url, f'engine_newPayloadV{payload_version}', params=payload_array, token=self.jwt_token, timeout=60)
 
         if block_number < self.end and block_number % self.batch_size < self.batch_size - 1:
             return
@@ -75,7 +77,7 @@ class PayloadApplier:
         while True:
             res = send_json_rpc(
                 self.engine_url,
-                f'engine_forkchoiceUpdatedV{version}',
+                f'engine_forkchoiceUpdatedV{fcu_version}',
                 params=[
                     {
                         'headBlockHash': payload['blockHash'],

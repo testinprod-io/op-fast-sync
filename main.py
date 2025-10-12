@@ -40,7 +40,9 @@ def trigger_sync_for_block(block_number, args):
 
     payload = payload_array[0]
     timestamp = int(payload['timestamp'], 16)
-    version = 4 if timestamp >= args.isthmus_time else 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
+    payload_version = 4 if timestamp >= args.isthmus_time else 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
+    # forkchoiceUpdated stays at V3 for Isthmus (V4 is only for newPayload/getPayload)
+    fcu_version = 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
 
     # Get JWT token
     with open(args.jwt_secret, 'r') as f:
@@ -59,19 +61,19 @@ def trigger_sync_for_block(block_number, args):
     finalized_header = send_json_rpc(args.l2_rpc_urls[0], RPCMethod.GetBlockByNumber, params=['finalized', False])
     finalized_hash = finalized_header['hash']
 
-    print(f'Sending newPayloadV{version} for block {block_number}...')
+    print(f'Sending newPayloadV{payload_version} for block {block_number}...')
     try:
-        send_json_rpc(args.engine_url, f'engine_newPayloadV{version}', params=payload_array, token=jwt_token, timeout=60)
+        send_json_rpc(args.engine_url, f'engine_newPayloadV{payload_version}', params=payload_array, token=jwt_token, timeout=60)
         print(f'Successfully sent newPayload')
     except Exception as e:
         print(f'Failed to send newPayload: {e}')
         raise
 
-    print(f'Sending forkchoiceUpdatedV{version} for block {block_number}...')
+    print(f'Sending forkchoiceUpdatedV{fcu_version} for block {block_number}...')
     try:
         send_json_rpc(
             args.engine_url,
-            f'engine_forkchoiceUpdatedV{version}',
+            f'engine_forkchoiceUpdatedV{fcu_version}',
             params=[{
                 'headBlockHash': payload['blockHash'],
                 'safeBlockHash': safe_hash,
@@ -138,7 +140,9 @@ if __name__ == '__main__':
                     payload_array = json.load(f)
                 payload = payload_array[0]
                 timestamp = int(payload['timestamp'], 16)
-                version = 4 if timestamp >= args.isthmus_time else 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
+                payload_version = 4 if timestamp >= args.isthmus_time else 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
+                # forkchoiceUpdated stays at V3 for Isthmus (V4 is only for newPayload/getPayload)
+                fcu_version = 3 if timestamp >= args.ecotone_time else 2 if timestamp >= args.canyon_time else 1
 
                 # Get JWT token
                 with open(args.jwt_secret, 'r') as f:
@@ -162,7 +166,7 @@ if __name__ == '__main__':
                             break
 
                         # Resend forkchoiceUpdated to nudge the engine
-                        print(f'Resending forkchoiceUpdatedV{version} for block {block_number}...')
+                        print(f'Resending forkchoiceUpdatedV{fcu_version} for block {block_number}...')
                         try:
                             auth_payload = {'iat': int(time.time())}
                             jwt_token = pyjwt.encode(
@@ -171,7 +175,7 @@ if __name__ == '__main__':
                             )
                             send_json_rpc(
                                 args.engine_url,
-                                f'engine_forkchoiceUpdatedV{version}',
+                                f'engine_forkchoiceUpdatedV{fcu_version}',
                                 params=[{
                                     'headBlockHash': payload['blockHash'],
                                     'safeBlockHash': safe_hash,
