@@ -94,10 +94,9 @@ if __name__ == '__main__':
     args = parse_args()
 
     # Configure rate limiter based on command-line argument
-    from utils import _rate_limiter
-    _rate_limiter.max_requests = args.rate_limit
-    _rate_limiter.tokens = args.rate_limit
-    print(f'Rate limiter configured: {args.rate_limit} requests/second')
+    from utils import _rate_limiter_manager
+    _rate_limiter_manager.set_rate(args.rate_limit)
+    print(f'Rate limiter configured: {args.rate_limit} requests/second per endpoint')
 
     if not os.path.exists(args.payload_dir):
         os.makedirs(args.payload_dir)

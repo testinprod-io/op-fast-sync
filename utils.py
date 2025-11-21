@@ -41,8 +41,35 @@ class RateLimiter:
         self.acquire()
 
 
-# Global rate limiter instance - 300 requests per second
-_rate_limiter = RateLimiter(max_requests_per_second=300)
+class RateLimiterManager:
+    """Manages separate rate limiters for each RPC endpoint URL."""
+
+    def __init__(self, default_rate=300):
+        self.default_rate = default_rate
+        self.limiters = {}
+        self.lock = threading.Lock()
+
+    def get_limiter(self, url):
+        """Get or create a rate limiter for a specific URL."""
+        # Extract base URL (remove trailing slashes, query params, etc.)
+        base_url = url.split('?')[0].rstrip('/')
+
+        with self.lock:
+            if base_url not in self.limiters:
+                self.limiters[base_url] = RateLimiter(max_requests_per_second=self.default_rate)
+            return self.limiters[base_url]
+
+    def set_rate(self, rate):
+        """Update the rate limit for all current and future limiters."""
+        with self.lock:
+            self.default_rate = rate
+            for limiter in self.limiters.values():
+                limiter.max_requests = rate
+                # Don't reset tokens - let them naturally refill
+
+
+# Global rate limiter manager - 300 requests per second per endpoint
+_rate_limiter_manager = RateLimiterManager(default_rate=300)
 
 
 class RPCMethod:
@@ -56,8 +83,9 @@ class RPCMethod:
 
 
 def send_json_rpc(url, method, params=None, token=None, timeout=10):
-    # Acquire rate limit permission before making request
-    _rate_limiter.acquire()
+    # Acquire rate limit permission for this specific URL before making request
+    limiter = _rate_limiter_manager.get_limiter(url)
+    limiter.acquire()
 
     headers = {
         'Content-Type': 'application/json',
