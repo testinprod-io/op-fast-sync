@@ -92,15 +92,18 @@ class RPCMethod:
     GetStorageAt = 'eth_getStorageAt'
 
 
-def send_json_rpc(url, method, params=None, token=None, timeout=10):
-    # Add small random jitter (0-10ms) to spread out concurrent requests from multiprocessing
-    # This prevents all processes from hitting the rate limiter at exactly the same time
-    jitter = _random.uniform(0, 0.01)  # 0-10ms
-    time.sleep(jitter)
+def send_json_rpc(url, method, params=None, token=None, timeout=10, skip_rate_limit=False):
+    # Skip rate limiting for local Engine API calls (they have JWT auth token)
+    # Only rate limit external RPC providers (L1/L2 nodes like QuickNode)
+    if not skip_rate_limit and token is None:
+        # Add small random jitter (0-10ms) to spread out concurrent requests from multiprocessing
+        # This prevents all processes from hitting the rate limiter at exactly the same time
+        jitter = _random.uniform(0, 0.01)  # 0-10ms
+        time.sleep(jitter)
 
-    # Acquire rate limit permission for this specific URL before making request
-    limiter = _rate_limiter_manager.get_limiter(url)
-    limiter.acquire()
+        # Acquire rate limit permission for this specific URL before making request
+        limiter = _rate_limiter_manager.get_limiter(url)
+        limiter.acquire()
 
     headers = {
         'Content-Type': 'application/json',

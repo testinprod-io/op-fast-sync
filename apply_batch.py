@@ -74,34 +74,79 @@ class PayloadApplier:
         if block_number < self.end and block_number % self.batch_size < self.batch_size - 1:
             return
 
-        while True:
-            res = send_json_rpc(
-                self.engine_url,
-                f'engine_forkchoiceUpdatedV{fcu_version}',
-                params=[
-                    {
-                        'headBlockHash': payload['blockHash'],
-                        'safeBlockHash': payload['blockHash'] if block_number < self.target_safe_number else self.target_safe_hash,
-                        'finalizedBlockHash': payload['blockHash'] if block_number < self.target_finalized_number else self.target_finalized_hash,
-                    },
-                ],
-                token=self.jwt_token,
-                timeout=60,
-            )
-            if res['payloadStatus']['status'] == 'SYNCING':
-                time.sleep(0.1)
-                continue
-            break
+        # Retry loop for forkchoiceUpdated with exponential backoff
+        max_fcu_attempts = 20
+        fcu_attempt = 0
+        backoff_time = 0.5
+
+        while fcu_attempt < max_fcu_attempts:
+            fcu_attempt += 1
+            try:
+                res = send_json_rpc(
+                    self.engine_url,
+                    f'engine_forkchoiceUpdatedV{fcu_version}',
+                    params=[
+                        {
+                            'headBlockHash': payload['blockHash'],
+                            'safeBlockHash': payload['blockHash'] if block_number < self.target_safe_number else self.target_safe_hash,
+                            'finalizedBlockHash': payload['blockHash'] if block_number < self.target_finalized_number else self.target_finalized_hash,
+                        },
+                    ],
+                    token=self.jwt_token,
+                    timeout=120,  # Increased from 60s to 120s
+                )
+
+                # Check status
+                if res['payloadStatus']['status'] == 'SYNCING':
+                    if fcu_attempt % 10 == 0:
+                        print(f"  Block {block_number}: Still syncing after {fcu_attempt} attempts, waiting...")
+                    time.sleep(backoff_time)
+                    backoff_time = min(backoff_time * 1.5, 5.0)  # Exponential backoff, max 5s
+                    continue
+
+                # Success
+                break
+
+            except Exception as e:
+                error_msg = str(e)
+
+                # Handle "execution service is busy" errors
+                if "busy" in error_msg.lower() or "timeout" in error_msg.lower():
+                    if fcu_attempt % 5 == 0:
+                        print(f"  Block {block_number}: Engine busy (attempt {fcu_attempt}/{max_fcu_attempts}), waiting {backoff_time:.1f}s...")
+                    time.sleep(backoff_time)
+                    backoff_time = min(backoff_time * 1.5, 10.0)  # Exponential backoff, max 10s
+                    continue
+                else:
+                    # Other errors, re-raise
+                    raise
+
+        # Check if we exhausted retries
+        if fcu_attempt >= max_fcu_attempts:
+            raise Exception(f"forkchoiceUpdated failed after {max_fcu_attempts} attempts for block {block_number}")
 
     def job(self, block_number):
-        for attempt in range(3):
+        max_attempts = 10  # Increased from 3 to 10
+        for attempt in range(max_attempts):
             try:
                 self.apply(block_number)
                 return
             except Exception as e:
-                print(f"Error applying block {block_number} (attempt {attempt + 1}/3): {e}")
+                error_msg = str(e)
+                # Only print every other attempt to reduce spam
+                if attempt % 2 == 0 or attempt == max_attempts - 1:
+                    print(f"Error applying block {block_number} (attempt {attempt + 1}/{max_attempts}): {e}")
+
+                # For "busy" errors, wait longer before retrying
+                if "busy" in error_msg.lower():
+                    wait_time = min(2.0 * (attempt + 1), 20.0)  # Up to 20s wait
+                    if attempt % 2 == 0:
+                        print(f"  Waiting {wait_time:.1f}s before retry...")
+                    time.sleep(wait_time)
+
                 self._get_jwt_token()
-        print(f"Failed to apply block {block_number} after 3 attempts")
+
+        print(f"Failed to apply block {block_number} after {max_attempts} attempts")
         exit()
 
     def run(self):
