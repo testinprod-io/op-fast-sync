@@ -1,8 +1,48 @@
 import requests
 import argparse
+import threading
+import time
 
 
 L1_BLOCK_CONTRACT_ADDR = '0x4200000000000000000000000000000000000015'
+
+
+class RateLimiter:
+    """Token bucket rate limiter for RPC requests."""
+
+    def __init__(self, max_requests_per_second=300):
+        self.max_requests = max_requests_per_second
+        self.tokens = max_requests_per_second
+        self.last_update = time.time()
+        self.lock = threading.Lock()
+
+    def acquire(self):
+        """Acquire permission to make a request. Blocks if rate limit is exceeded."""
+        with self.lock:
+            now = time.time()
+            elapsed = now - self.last_update
+
+            # Refill tokens based on elapsed time
+            self.tokens = min(self.max_requests, self.tokens + elapsed * self.max_requests)
+            self.last_update = now
+
+            # If we have tokens, consume one and proceed
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return
+
+            # Otherwise, calculate how long to wait
+            wait_time = (1 - self.tokens) / self.max_requests
+
+        # Sleep outside the lock to allow other threads to check
+        time.sleep(wait_time)
+
+        # Recursively try again after waiting
+        self.acquire()
+
+
+# Global rate limiter instance - 300 requests per second
+_rate_limiter = RateLimiter(max_requests_per_second=300)
 
 
 class RPCMethod:
@@ -16,6 +56,9 @@ class RPCMethod:
 
 
 def send_json_rpc(url, method, params=None, token=None, timeout=10):
+    # Acquire rate limit permission before making request
+    _rate_limiter.acquire()
+
     headers = {
         'Content-Type': 'application/json',
     }
@@ -69,4 +112,5 @@ def parse_args():
     parser.add_argument('--sequential', action='store_true', default=False, help='Force sequential mode (build all, then apply all)')
     parser.add_argument('--trigger-sync', dest='trigger_sync', default=None, type=int, help='Trigger EL sync by building and applying a single block, then exit')
     parser.add_argument('--trigger-sync-list', dest='trigger_sync_list', default=None, type=str, help='Trigger EL sync for a list of blocks sequentially (comma-separated), waiting for each to sync before proceeding. Example: 10,20,30')
+    parser.add_argument('--rate-limit', dest='rate_limit', default=300, type=int, help='Maximum RPC requests per second (default: 300)')
     return parser.parse_args()

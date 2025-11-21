@@ -92,6 +92,13 @@ def trigger_sync_for_block(block_number, args):
 
 if __name__ == '__main__':
     args = parse_args()
+
+    # Configure rate limiter based on command-line argument
+    from utils import _rate_limiter
+    _rate_limiter.max_requests = args.rate_limit
+    _rate_limiter.tokens = args.rate_limit
+    print(f'Rate limiter configured: {args.rate_limit} requests/second')
+
     if not os.path.exists(args.payload_dir):
         os.makedirs(args.payload_dir)
         print(f'Created payload dir: {args.payload_dir}')
