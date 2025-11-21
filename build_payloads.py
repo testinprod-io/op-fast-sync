@@ -214,6 +214,7 @@ class PayloadBuilder:
         start_time = time.time()
         first_result_time = None
         
+        failed_blocks = []
         for result in pbar:
             # Update shared state in main thread
             if result is not None:
@@ -230,7 +231,9 @@ class PayloadBuilder:
                             stats = self.shared_state.get_stats()
                             print(f"Built block {block_num} (total built: {stats['built']})")
                     else:
-                        self.shared_state.mark_builder_failed()
+                        # Track failed blocks but don't stop the entire process
+                        failed_blocks.append(block_num)
+                        print(f"⚠ Block {block_num} failed to build, will be skipped")
 
             now = time.time()
             if self.logging and now > logged_at + 10:
@@ -240,7 +243,19 @@ class PayloadBuilder:
 
         p.close()
         p.join()
-        print(f"PayloadBuilder completed: processed {end - start + 1} blocks")
+
+        total_blocks = end - start + 1
+        successful_blocks = total_blocks - len(failed_blocks)
+        print(f"PayloadBuilder completed: {successful_blocks}/{total_blocks} blocks built successfully")
+
+        if failed_blocks:
+            print(f"⚠ {len(failed_blocks)} blocks failed to build and will be skipped:")
+            # Show first 10 failed blocks
+            if len(failed_blocks) <= 10:
+                print(f"  Failed blocks: {failed_blocks}")
+            else:
+                print(f"  First 10 failed blocks: {failed_blocks[:10]}")
+                print(f"  ... and {len(failed_blocks) - 10} more")
 
         # Mark building as complete
         if self.shared_state is not None:

@@ -2,6 +2,7 @@ import requests
 import argparse
 import threading
 import time
+import random as _random
 
 
 L1_BLOCK_CONTRACT_ADDR = '0x4200000000000000000000000000000000000015'
@@ -76,9 +77,9 @@ class RateLimiterManager:
             }
 
 
-# Global rate limiter manager - 250 requests per second per endpoint (default)
+# Global rate limiter manager - 200 requests per second per endpoint (default)
 # Conservative default to account for burst traffic from multiprocessing
-_rate_limiter_manager = RateLimiterManager(default_rate=250)
+_rate_limiter_manager = RateLimiterManager(default_rate=200)
 
 
 class RPCMethod:
@@ -92,6 +93,11 @@ class RPCMethod:
 
 
 def send_json_rpc(url, method, params=None, token=None, timeout=10):
+    # Add small random jitter (0-10ms) to spread out concurrent requests from multiprocessing
+    # This prevents all processes from hitting the rate limiter at exactly the same time
+    jitter = _random.uniform(0, 0.01)  # 0-10ms
+    time.sleep(jitter)
+
     # Acquire rate limit permission for this specific URL before making request
     limiter = _rate_limiter_manager.get_limiter(url)
     limiter.acquire()
@@ -139,7 +145,7 @@ def parse_args():
     parser.add_argument('--engine', dest='engine_url', required=True)
     parser.add_argument('--batch-size', dest='batch_size', default=100, type=int)
     parser.add_argument('--jwt-secret', dest='jwt_secret', default='./jwt-secret.txt')
-    parser.add_argument('--num-proc', dest='num_proc', default=32, type=int)
+    parser.add_argument('--num-proc', dest='num_proc', default=16, type=int, help='Number of parallel processes for building payloads (default: 16, reduce if hitting rate limits)')
     parser.add_argument('--logging', action='store_true', default=False)
     parser.add_argument('--canyon-time', dest='canyon_time', default=0, type=int)
     parser.add_argument('--ecotone-time', dest='ecotone_time', default=0, type=int)
@@ -149,5 +155,5 @@ def parse_args():
     parser.add_argument('--sequential', action='store_true', default=False, help='Force sequential mode (build all, then apply all)')
     parser.add_argument('--trigger-sync', dest='trigger_sync', default=None, type=int, help='Trigger EL sync by building and applying a single block, then exit')
     parser.add_argument('--trigger-sync-list', dest='trigger_sync_list', default=None, type=str, help='Trigger EL sync for a list of blocks sequentially (comma-separated), waiting for each to sync before proceeding. Example: 10,20,30')
-    parser.add_argument('--rate-limit', dest='rate_limit', default=250, type=int, help='Maximum RPC requests per second per endpoint (default: 250, safer than 300 to account for burst traffic)')
+    parser.add_argument('--rate-limit', dest='rate_limit', default=200, type=int, help='Maximum RPC requests per second per endpoint (default: 200, conservative limit to prevent bursts from multiprocessing)')
     return parser.parse_args()

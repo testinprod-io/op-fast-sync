@@ -134,23 +134,20 @@ class PayloadApplier:
                 print(f"Starting to apply first block: {block_number}")
 
             # Wait for blocks to be available
+            block_is_available = False
             while True:
-                # Check if builder failed
                 stats = self.shared_state.get_stats()
-                if stats['builder_failed']:
-                    print(f"Builder failed, stopping applier")
-                    return
 
                 # Check if the current block is available
                 if self.shared_state.is_block_built(block_number):
+                    block_is_available = True
                     break
 
                 # If building is complete and this block isn't built, skip it
                 if stats['building_complete']:
                     if not self.shared_state.is_block_built(block_number):
-                        print(f"Block {block_number} not available and building complete, skipping")
-                        continue
-                    else:
+                        print(f"⚠ Block {block_number} not built (failed during building), skipping")
+                        block_is_available = False
                         break
 
                 # Debug output
@@ -163,7 +160,12 @@ class PayloadApplier:
                     # Timeout, check again
                     continue
 
-            self.job(block_number)
+            # Only apply if the block was successfully built
+            if block_is_available:
+                self.job(block_number)
+            else:
+                # Skip this block and continue to next
+                pbar.update(1)
             now = time.time()
             if self.logging and now > logged_at + 10:
                 data = pbar.format_dict
