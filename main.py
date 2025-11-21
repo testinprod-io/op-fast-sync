@@ -276,25 +276,44 @@ if __name__ == '__main__':
 
         # Create threads for concurrent building and applying
         def build_thread():
-            print('Start building payloads')
-            payload_builder.run_multiproc(start, end, args.num_proc)
+            print('[Builder Thread] Starting...')
+            try:
+                payload_builder.run_multiproc(start, end, args.num_proc)
+                print('[Builder Thread] Completed successfully')
+            except Exception as e:
+                print(f'[Builder Thread] ERROR: {e}')
+                import traceback
+                traceback.print_exc()
 
         def apply_thread():
-            print('Start applying payloads')
-            payload_applier.run()
+            print('[Applier Thread] Starting...')
+            try:
+                payload_applier.run()
+                print('[Applier Thread] Completed successfully')
+            except Exception as e:
+                print(f'[Applier Thread] ERROR: {e}')
+                import traceback
+                traceback.print_exc()
 
         # Start both threads
+        print('Creating builder and applier threads...')
         builder = threading.Thread(target=build_thread, name="Builder")
         applier = threading.Thread(target=apply_thread, name="Applier")
 
+        print('Starting builder thread...')
         builder.start()
         # Give the builder a small head start to build a few blocks
+        print('Waiting 1 second before starting applier...')
         time.sleep(1)
+        print('Starting applier thread...')
         applier.start()
 
+        print('Both threads started, waiting for completion...')
         # Wait for both to complete
         builder.join()
+        print('Builder thread finished')
         applier.join()
+        print('Applier thread finished')
 
         print('Both building and applying completed')
     else:

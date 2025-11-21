@@ -8,37 +8,36 @@ L1_BLOCK_CONTRACT_ADDR = '0x4200000000000000000000000000000000000015'
 
 
 class RateLimiter:
-    """Token bucket rate limiter for RPC requests."""
+    """
+    Leaky bucket rate limiter for RPC requests.
+
+    This ensures smooth rate limiting without large bursts that could
+    exceed provider limits when multiple processes make requests simultaneously.
+    """
 
     def __init__(self, max_requests_per_second=300):
         self.max_requests = max_requests_per_second
-        self.tokens = max_requests_per_second
-        self.last_update = time.time()
+        self.min_interval = 1.0 / max_requests_per_second  # Minimum time between requests
+        self.last_request_time = 0
         self.lock = threading.Lock()
 
     def acquire(self):
-        """Acquire permission to make a request. Blocks if rate limit is exceeded."""
+        """Acquire permission to make a request. Blocks if rate limit would be exceeded."""
         with self.lock:
             now = time.time()
-            elapsed = now - self.last_update
+            time_since_last = now - self.last_request_time
 
-            # Refill tokens based on elapsed time
-            self.tokens = min(self.max_requests, self.tokens + elapsed * self.max_requests)
-            self.last_update = now
+            # If not enough time has passed, calculate wait time
+            if time_since_last < self.min_interval:
+                wait_time = self.min_interval - time_since_last
+                self.last_request_time = now + wait_time
+            else:
+                wait_time = 0
+                self.last_request_time = now
 
-            # If we have tokens, consume one and proceed
-            if self.tokens >= 1:
-                self.tokens -= 1
-                return
-
-            # Otherwise, calculate how long to wait
-            wait_time = (1 - self.tokens) / self.max_requests
-
-        # Sleep outside the lock to allow other threads to check
-        time.sleep(wait_time)
-
-        # Recursively try again after waiting
-        self.acquire()
+        # Sleep outside the lock to allow other threads to proceed
+        if wait_time > 0:
+            time.sleep(wait_time)
 
 
 class RateLimiterManager:
@@ -67,9 +66,19 @@ class RateLimiterManager:
                 limiter.max_requests = rate
                 # Don't reset tokens - let them naturally refill
 
+    def get_stats(self):
+        """Get statistics about tracked endpoints."""
+        with self.lock:
+            return {
+                'default_rate': self.default_rate,
+                'num_endpoints': len(self.limiters),
+                'endpoints': list(self.limiters.keys())
+            }
 
-# Global rate limiter manager - 300 requests per second per endpoint
-_rate_limiter_manager = RateLimiterManager(default_rate=300)
+
+# Global rate limiter manager - 250 requests per second per endpoint (default)
+# Conservative default to account for burst traffic from multiprocessing
+_rate_limiter_manager = RateLimiterManager(default_rate=250)
 
 
 class RPCMethod:
@@ -140,5 +149,5 @@ def parse_args():
     parser.add_argument('--sequential', action='store_true', default=False, help='Force sequential mode (build all, then apply all)')
     parser.add_argument('--trigger-sync', dest='trigger_sync', default=None, type=int, help='Trigger EL sync by building and applying a single block, then exit')
     parser.add_argument('--trigger-sync-list', dest='trigger_sync_list', default=None, type=str, help='Trigger EL sync for a list of blocks sequentially (comma-separated), waiting for each to sync before proceeding. Example: 10,20,30')
-    parser.add_argument('--rate-limit', dest='rate_limit', default=300, type=int, help='Maximum RPC requests per second (default: 300)')
+    parser.add_argument('--rate-limit', dest='rate_limit', default=250, type=int, help='Maximum RPC requests per second per endpoint (default: 250, safer than 300 to account for burst traffic)')
     return parser.parse_args()
